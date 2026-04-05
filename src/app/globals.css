@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@theme inline {
+  --color-background: #f0fdf4;
+  --color-foreground: #1f2937;
+}
+
+body {
+  font-family: 'Comic Sans MS', 'Chalkboard SE', sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+.btn-primary {
+  @apply bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 text-xl;
+}
+
+.input-primary {
+  @apply border-4 border-green-300 rounded-2xl p-4 text-xl w-full focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-200 transition-all shadow-inner;
+}
