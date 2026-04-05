@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from "react";
 import Login from "@/components/Login";
-import Studio from "@/components/Studio";
+import PhotoStudio from "@/components/PhotoStudio";
 import Link from "next/link";
 
-export default function Home() {
+export default function PhotoPage() {
   const [user, setUser] = useState<{ nickname: string; pin: string } | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Load saved user from localStorage on initial render
   useEffect(() => {
     setIsMounted(true);
     const savedUser = localStorage.getItem('banana_studio_user');
@@ -27,7 +26,6 @@ export default function Home() {
     setUser(userData);
     localStorage.setItem('banana_studio_user', JSON.stringify(userData));
 
-    // Register or update the student in the backend so they appear on the admin dashboard immediately
     try {
       await fetch('/api/register', {
         method: 'POST',
@@ -44,13 +42,13 @@ export default function Home() {
     localStorage.removeItem('banana_studio_user');
   };
 
-  const handleGenerate = async (prompt: string): Promise<{imageUrl: string, remainingQuota: number}> => {
+  const handleGenerate = async (prompt: string, referenceImageBase64: string, referenceMimeType: string): Promise<{imageUrl: string, remainingQuota: number}> => {
     if (!user) throw new Error("Not logged in");
 
-    const response = await fetch('/api/generate', {
+    const response = await fetch('/api/generate-with-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, user }),
+      body: JSON.stringify({ prompt, user, referenceImageBase64, referenceMimeType }),
     });
 
     const data = await response.json();
@@ -61,7 +59,6 @@ export default function Home() {
     return { imageUrl: data.imageUrl, remainingQuota: data.remainingQuota };
   };
 
-  // Prevent hydration mismatch by not rendering the dynamic UI until mounted on client
   if (!isMounted) {
     return <div className="flex h-screen items-center justify-center">마법을 준비하는 중... 🪄</div>;
   }
@@ -69,26 +66,29 @@ export default function Home() {
   return (
     <div className="w-full flex justify-center">
       {!user ? (
-        <Login onLogin={handleLogin} />
+        <div className="flex flex-col items-center">
+            <Login onLogin={handleLogin} />
+            <Link href="/" className="mt-6 text-gray-500 hover:text-green-600 font-bold underline transition">
+               ← 기본 스튜디오로 돌아가기
+            </Link>
+        </div>
       ) : (
         <div className="w-full flex flex-col items-center">
-          <div className="mb-6 text-green-700 font-extrabold text-2xl drop-shadow-sm flex items-center justify-center">
-            환영합니다, <span className="text-blue-600 mx-2 text-3xl">{user.nickname}</span>님! ✨
-            <button 
-              onClick={handleLogout}
-              className="ml-4 text-base font-normal text-gray-500 underline hover:text-gray-700 transition"
-            >
-              (로그아웃)
-            </button>
-          </div>
-          <Studio onGenerate={handleGenerate} />
-          
-          <div className="mt-8 text-center bg-blue-50 p-6 rounded-3xl border-2 border-blue-200 shadow-sm w-full max-w-2xl">
-             <p className="text-gray-700 font-bold mb-3 text-lg">내 그림이나 장난감 사진으로 마법을 부리고 싶나요?</p>
-             <Link href="/photo" className="inline-block bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-md transition transform hover:scale-105">
-                마법 사진관으로 가기 📸
+          <div className="mb-4 w-full max-w-2xl flex justify-between items-center px-4">
+             <Link href="/" className="text-gray-500 hover:text-green-600 font-bold underline transition">
+               ← 텍스트로만 그리기
              </Link>
+             <button 
+                onClick={handleLogout}
+                className="text-sm font-normal text-gray-500 underline hover:text-gray-700 transition"
+              >
+                (로그아웃)
+              </button>
           </div>
+          <div className="mb-2 text-blue-700 font-extrabold text-2xl drop-shadow-sm flex items-center justify-center">
+            <span className="text-green-600 mx-2 text-3xl">{user.nickname}</span>의 마법 사진관 🖼️
+          </div>
+          <PhotoStudio onGenerate={handleGenerate} />
         </div>
       )}
     </div>
