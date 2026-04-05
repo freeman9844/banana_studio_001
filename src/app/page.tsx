@@ -93,23 +93,26 @@ export default function Home() {
         <Login onLogin={handleLogin} />
       ) : (
         <div className="w-full flex flex-col items-center">
+          <div className="mb-4 w-full max-w-2xl flex justify-between items-center px-4">
+             <div>
+               {/* Placeholder for left side to keep layout balanced if needed, or leave empty */}
+             </div>
+             <div className="flex items-center gap-4">
+               <Link href="/photo" className="text-gray-500 hover:text-green-600 font-bold underline transition">
+                 마법 사진관으로 가기 📸 →
+               </Link>
+               <button 
+                  onClick={handleLogout}
+                  className="text-sm font-normal text-gray-500 underline hover:text-gray-700 transition"
+                >
+                  (로그아웃)
+                </button>
+             </div>
+          </div>
           <div className="mb-6 text-green-700 font-extrabold text-2xl drop-shadow-sm flex items-center justify-center">
             환영합니다, <span className="text-blue-600 mx-2 text-3xl">{user.nickname}</span>님! ✨
-            <button 
-              onClick={handleLogout}
-              className="ml-4 text-base font-normal text-gray-500 underline hover:text-gray-700 transition"
-            >
-              (로그아웃)
-            </button>
           </div>
           <Studio onGenerate={handleGenerate} initialQuota={initialQuota} />
-          
-          <div className="mt-8 text-center bg-blue-50 p-6 rounded-3xl border-2 border-blue-200 shadow-sm w-full max-w-2xl">
-             <p className="text-gray-700 font-bold mb-3 text-lg">내 그림이나 장난감 사진으로 마법을 부리고 싶나요?</p>
-             <Link href="/photo" className="inline-block bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-md transition transform hover:scale-105">
-                마법 사진관으로 가기 📸
-             </Link>
-          </div>
         </div>
       )}
     </div>
