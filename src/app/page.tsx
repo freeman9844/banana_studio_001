@@ -94,19 +94,16 @@ export default function Home() {
       ) : (
         <div className="w-full flex flex-col items-center">
           <div className="mb-4 w-full max-w-2xl flex justify-between items-center px-4">
-             <div>
-               {/* Placeholder for left side to keep layout balanced if needed, or leave empty */}
-             </div>
+             <button 
+                onClick={handleLogout}
+                className="text-sm font-normal text-gray-500 underline hover:text-gray-700 transition"
+              >
+                (로그아웃)
+              </button>
              <div className="flex items-center gap-4">
                <Link href="/photo" className="text-gray-500 hover:text-green-600 font-bold underline transition">
                  마법 사진관으로 가기 📸 →
                </Link>
-               <button 
-                  onClick={handleLogout}
-                  className="text-sm font-normal text-gray-500 underline hover:text-gray-700 transition"
-                >
-                  (로그아웃)
-                </button>
              </div>
           </div>
           <div className="mb-6 text-green-700 font-extrabold text-2xl drop-shadow-sm flex items-center justify-center">

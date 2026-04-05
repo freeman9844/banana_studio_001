@@ -93,15 +93,15 @@ export default function PhotoPage() {
       ) : (
         <div className="w-full flex flex-col items-center">
           <div className="mb-4 w-full max-w-2xl flex justify-between items-center px-4">
-             <Link href="/" className="text-gray-500 hover:text-green-600 font-bold underline transition">
-               ← 텍스트로만 그리기
-             </Link>
              <button 
                 onClick={handleLogout}
                 className="text-sm font-normal text-gray-500 underline hover:text-gray-700 transition"
               >
                 (로그아웃)
               </button>
+             <Link href="/" className="text-gray-500 hover:text-green-600 font-bold underline transition">
+               ← 텍스트로만 그리기
+             </Link>
           </div>
           <div className="mb-2 text-blue-700 font-extrabold text-2xl drop-shadow-sm flex items-center justify-center">
             <span className="text-green-600 mx-2 text-3xl">{user.nickname}</span>의 마법 사진관 🖼️
