@@ -1,16 +1,35 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Login from "@/components/Login";
 import Studio from "@/components/Studio";
 
 export default function Home() {
   const [user, setUser] = useState<{ nickname: string; pin: string } | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  // Load saved user from localStorage on initial render
+  useEffect(() => {
+    const savedUser = localStorage.getItem('banana_studio_user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        console.error("Failed to parse saved user", e);
+      }
+    }
+    setIsInitializing(false);
+  }, []);
 
   const handleLogin = (nickname: string, pin: string) => {
-    // In a real app, this would hit an API to verify/create user
-    // For this simple version, we trust the client state
-    setUser({ nickname, pin });
+    const userData = { nickname, pin };
+    setUser(userData);
+    localStorage.setItem('banana_studio_user', JSON.stringify(userData));
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('banana_studio_user');
   };
 
   const handleGenerate = async (prompt: string): Promise<{imageUrl: string, remainingQuota: number}> => {
@@ -30,6 +49,10 @@ export default function Home() {
     return { imageUrl: data.imageUrl, remainingQuota: data.remainingQuota };
   };
 
+  if (isInitializing) {
+    return <div className="flex h-screen items-center justify-center">마법을 준비하는 중... 🪄</div>;
+  }
+
   return (
     <div className="w-full flex justify-center">
       {!user ? (
@@ -39,7 +62,7 @@ export default function Home() {
           <div className="mb-6 text-green-700 font-extrabold text-2xl drop-shadow-sm flex items-center justify-center">
             환영합니다, <span className="text-blue-600 mx-2 text-3xl">{user.nickname}</span>님! ✨
             <button 
-              onClick={() => setUser(null)}
+              onClick={handleLogout}
               className="ml-4 text-base font-normal text-gray-500 underline hover:text-gray-700 transition"
             >
               (로그아웃)
