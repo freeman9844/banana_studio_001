@@ -51,6 +51,21 @@
     *   학생용 스튜디오: [http://localhost:3000](http://localhost:3000)
     *   선생님 관리자: [http://localhost:3000/admin](http://localhost:3000/admin)
 
+## 클라우드 배포 방법 (Cloud Run)
+
+포함된 `deploy.sh` 스크립트를 사용하여 Google Cloud Run에 쉽게 배포할 수 있습니다. (Node.js 애플리케이션 컨테이너화 최적화를 위해 Standalone 빌드가 적용된 Dockerfile을 포함하고 있습니다.)
+
+```bash
+# 기본 배포 (스크립트 내의 기본 프로젝트와 us-central1 리전 사용)
+./deploy.sh
+
+# 환경 변수를 통해 커스텀 배포
+GOOGLE_CLOUD_PROJECT=my-project-id GOOGLE_CLOUD_LOCATION=asia-northeast3 SERVICE_NAME=my-banana-studio ./deploy.sh
+```
+
+**⚠️ 배포 시 주의사항 (Stateless Data):**
+현재 버전은 설치와 실행을 극도로 단순화하기 위해 데이터베이스 없이 로컬 파일(`data/quotas.json`)에 학생 기록을 저장합니다. Cloud Run과 같은 서버리스 환경은 **컨테이너가 종료되거나 스케일 아웃될 때 내부 파일 시스템이 초기화**되므로, 장기간 지속적인 서비스 운영을 위해서는 추후 이 부분을 Firebase Firestore나 Supabase 등의 외부 DB로 연결하는 수정이 필요합니다. (단발성 교실 체험 목적의 배포라면 즉시 사용 가능합니다.)
+
 ## 화면 미리보기
 
 *   **스튜디오 로그인:** 닉네임과 PIN으로 빠르고 간편하게 입장!
