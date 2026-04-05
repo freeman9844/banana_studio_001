@@ -3,13 +3,18 @@ import { getQuotas, saveQuotas } from '@/lib/quotaStore';
 
 export async function POST(request: Request) {
   try {
-    const { nickname, action } = await request.json();
+    const { nickname, action, amount } = await request.json();
     const quotas = getQuotas();
+    const targetAmount = amount === undefined ? 20 : amount;
+    const targetUsage = 20 - targetAmount;
 
     if (nickname === 'ALL') {
        // Reset everyone
-       saveQuotas({});
-       return NextResponse.json({ success: true, message: 'All quotas reset/deleted' });
+       Object.keys(quotas).forEach(key => {
+           quotas[key].usage = targetUsage;
+       });
+       saveQuotas(quotas);
+       return NextResponse.json({ success: true, message: `All quotas reset to ${targetAmount}` });
     }
 
     if (!nickname) {
@@ -22,10 +27,10 @@ export async function POST(request: Request) {
        return NextResponse.json({ success: true, message: `Student ${nickname} removed` });
     }
 
-    // Reset specific user by setting usage to 0 (or removing them from the map)
+    // Reset specific user by setting usage
     const existing = quotas[nickname];
     if (existing) {
-        quotas[nickname] = { usage: 0, pin: existing.pin };
+        quotas[nickname] = { usage: targetUsage, pin: existing.pin };
         saveQuotas(quotas);
     }
 

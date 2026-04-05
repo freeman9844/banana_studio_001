@@ -46,8 +46,8 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  const handleReset = async (nickname: string) => {
-    if (!confirm(nickname === 'ALL' ? '모든 학생의 마법 횟수를 20번으로 초기화하시겠습니까?' : `${nickname} 학생의 횟수를 초기화하시겠습니까?`)) {
+  const handleReset = async (nickname: string, amount: number = 20) => {
+    if (!confirm(nickname === 'ALL' ? `모든 학생의 마법 횟수를 ${amount}번으로 초기화하시겠습니까?` : `[${nickname}] 학생의 횟수를 ${amount}번으로 설정하시겠습니까?`)) {
       return;
     }
 
@@ -55,7 +55,7 @@ export default function AdminDashboard() {
       const res = await fetch('/api/admin/quotas/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname, action: 'RESET' })
+        body: JSON.stringify({ nickname, action: 'RESET', amount })
       });
       
       if (res.ok) {
@@ -174,10 +174,18 @@ export default function AdminDashboard() {
                   </td>
                   <td className="p-4 text-right flex justify-end gap-2">
                     <button 
-                      onClick={() => handleReset(q.nickname)}
-                      className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg text-sm transition shadow-sm border border-blue-200"
+                      onClick={() => handleReset(q.nickname, 5)}
+                      className="bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-semibold py-2 px-3 rounded-lg text-sm transition shadow-sm border border-yellow-200"
+                      title="마법 5번(1/4) 충전"
                     >
-                      충전 🔋
+                      1/4 충전 ⚡
+                    </button>
+                    <button 
+                      onClick={() => handleReset(q.nickname, 20)}
+                      className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-3 rounded-lg text-sm transition shadow-sm border border-blue-200"
+                      title="마법 20번(가득) 충전"
+                    >
+                      가득 충전 🔋
                     </button>
                     <button 
                       onClick={() => handleDelete(q.nickname)}
