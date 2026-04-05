@@ -39,3 +39,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+test-*.js\ntranslate-and-gen.js\ngenerate-icon.js\noutput*.png\n
