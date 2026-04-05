@@ -6,10 +6,11 @@ import Studio from "@/components/Studio";
 
 export default function Home() {
   const [user, setUser] = useState<{ nickname: string; pin: string } | null>(null);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
 
   // Load saved user from localStorage on initial render
   useEffect(() => {
+    setIsMounted(true);
     const savedUser = localStorage.getItem('banana_studio_user');
     if (savedUser) {
       try {
@@ -18,7 +19,6 @@ export default function Home() {
         console.error("Failed to parse saved user", e);
       }
     }
-    setIsInitializing(false);
   }, []);
 
   const handleLogin = (nickname: string, pin: string) => {
@@ -49,7 +49,8 @@ export default function Home() {
     return { imageUrl: data.imageUrl, remainingQuota: data.remainingQuota };
   };
 
-  if (isInitializing) {
+  // Prevent hydration mismatch by not rendering the dynamic UI until mounted on client
+  if (!isMounted) {
     return <div className="flex h-screen items-center justify-center">마법을 준비하는 중... 🪄</div>;
   }
 
