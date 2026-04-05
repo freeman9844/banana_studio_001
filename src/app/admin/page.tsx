@@ -176,9 +176,9 @@ export default function AdminDashboard() {
                     <button 
                       onClick={() => handleReset(q.nickname, 5)}
                       className="bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-semibold py-2 px-3 rounded-lg text-sm transition shadow-sm border border-yellow-200"
-                      title="마법 5번(1/4) 충전"
+                      title="마법 5번 충전"
                     >
-                      1/4 충전 ⚡
+                      5번 충전 ⚡
                     </button>
                     <button 
                       onClick={() => handleReset(q.nickname, 20)}
