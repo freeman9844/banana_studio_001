@@ -39,16 +39,37 @@ export async function POST(request: Request) {
 
     console.log(`Generating image for ${user.nickname}: ${prompt}`);
 
-    // Call the Gemini 3.1 Flash Image model using generateContent
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-image-preview',
-      contents: prompt,
-      config: {
-        responseModalities: ["IMAGE"],
-        // Setting thinkingBudget to 0 skips the slow "Chain of Thought" phase and halves latency
-        thinkingConfig: { thinkingBudget: 0 }
-      },
-    });
+    // Function to call the Gemini model with exponential backoff retries for 429 errors
+    const generateImageWithRetry = async (promptText: string, maxRetries: number = 3) => {
+      let retries = 0;
+      while (true) {
+        try {
+          return await ai.models.generateContent({
+            model: 'gemini-3.1-flash-image-preview',
+            contents: promptText,
+            config: {
+              responseModalities: ["IMAGE"],
+              // Setting thinkingBudget to 0 skips the slow "Chain of Thought" phase and halves latency
+              thinkingConfig: { thinkingBudget: 0 }
+            },
+          });
+        } catch (error: any) {
+          // Check if it's a quota/rate limit error (429)
+          if (error.status === 429 && retries < maxRetries) {
+            retries++;
+            // Exponential backoff: 2s, 4s, 8s (plus some jitter)
+            const delayMs = Math.pow(2, retries) * 1000 + Math.random() * 500;
+            console.warn(`[Retry ${retries}/${maxRetries}] 429 Rate limit hit for ${user.nickname}. Retrying in ${Math.round(delayMs)}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          } else {
+            throw error; // Re-throw if it's not 429 or max retries reached
+          }
+        }
+      }
+    };
+
+    // Call the Gemini 3.1 Flash Image model using generateContent with retry logic
+    const response = await generateImageWithRetry(prompt);
 
     if (!response.candidates || response.candidates.length === 0) {
       throw new Error("No candidates returned from model");
