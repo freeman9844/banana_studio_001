@@ -100,11 +100,9 @@ export default function Home() {
               >
                 (로그아웃)
               </button>
-             <div className="flex items-center gap-4">
-               <Link href="/photo" className="text-gray-500 hover:text-green-600 font-bold underline transition">
-                 마법 사진관으로 가기 📸 →
-               </Link>
-             </div>
+             <Link href="/photo" className="text-gray-500 hover:text-green-600 font-bold underline transition">
+               마법 사진관으로 가기 📸 →
+             </Link>
           </div>
           <div className="mb-6 text-green-700 font-extrabold text-2xl drop-shadow-sm flex items-center justify-center">
             환영합니다, <span className="text-blue-600 mx-2 text-3xl">{user.nickname}</span>님! ✨
