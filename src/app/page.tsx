@@ -9,23 +9,42 @@ export default function Home() {
   const [user, setUser] = useState<{ nickname: string; pin: string } | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
+  const [initialQuota, setInitialQuota] = useState(20);
+
   // Load saved user from localStorage on initial render
   useEffect(() => {
     setIsMounted(true);
     const savedUser = localStorage.getItem('banana_studio_user');
     if (savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        const parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+        // Fetch current quota after successful reload
+        fetchCurrentQuota(parsedUser.nickname).then(q => setInitialQuota(q));
       } catch (e) {
         console.error("Failed to parse saved user", e);
       }
     }
   }, []);
 
+  const fetchCurrentQuota = async (nickname: string) => {
+     try {
+       const res = await fetch(`/api/quota?nickname=${encodeURIComponent(nickname)}`);
+       if (res.ok) {
+         const data = await res.json();
+         return data.remainingQuota;
+       }
+     } catch (e) {
+       console.error("Failed to fetch quota", e);
+     }
+     return 20; // Default fallback
+  };
+
   const handleLogin = async (nickname: string, pin: string) => {
     const userData = { nickname, pin };
     setUser(userData);
     localStorage.setItem('banana_studio_user', JSON.stringify(userData));
+    setInitialQuota(20); // Reset for new user
 
     // Register or update the student in the backend so they appear on the admin dashboard immediately
     try {
@@ -34,6 +53,8 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData),
       });
+      // Fetch latest in case they were already registered before
+      fetchCurrentQuota(nickname).then(q => setInitialQuota(q));
     } catch (error) {
       console.error("Failed to register student on login", error);
     }
@@ -81,7 +102,7 @@ export default function Home() {
               (로그아웃)
             </button>
           </div>
-          <Studio onGenerate={handleGenerate} />
+          <Studio onGenerate={handleGenerate} initialQuota={initialQuota} />
           
           <div className="mt-8 text-center bg-blue-50 p-6 rounded-3xl border-2 border-blue-200 shadow-sm w-full max-w-2xl">
              <p className="text-gray-700 font-bold mb-3 text-lg">내 그림이나 장난감 사진으로 마법을 부리고 싶나요?</p>

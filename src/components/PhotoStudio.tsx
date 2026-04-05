@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface PhotoStudioProps {
   onGenerate: (prompt: string, imageBase64: string, mimeType: string) => Promise<{imageUrl: string, remainingQuota: number}>;
@@ -13,6 +13,10 @@ export default function PhotoStudio({ onGenerate, initialQuota = 20 }: PhotoStud
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [quota, setQuota] = useState<number>(initialQuota);
   
+  useEffect(() => {
+    setQuota(initialQuota);
+  }, [initialQuota]);
+
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [base64Data, setBase64Data] = useState<string | null>(null);
   const [mimeType, setMimeType] = useState<string | null>(null);
