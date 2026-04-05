@@ -21,10 +21,21 @@ export default function Home() {
     }
   }, []);
 
-  const handleLogin = (nickname: string, pin: string) => {
+  const handleLogin = async (nickname: string, pin: string) => {
     const userData = { nickname, pin };
     setUser(userData);
     localStorage.setItem('banana_studio_user', JSON.stringify(userData));
+
+    // Register or update the student in the backend so they appear on the admin dashboard immediately
+    try {
+      await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData),
+      });
+    } catch (error) {
+      console.error("Failed to register student on login", error);
+    }
   };
 
   const handleLogout = () => {
