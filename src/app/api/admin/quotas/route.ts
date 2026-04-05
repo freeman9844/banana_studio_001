@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server';
+import { getQuotas } from '@/lib/quotaStore';
 
 export async function GET() {
-  const globalAny: any = global;
-  if (!globalAny.userQuotas) {
-    globalAny.userQuotas = new Map<string, { usage: number, pin: string }>();
-  }
+  const quotas = getQuotas();
   
-  const userQuotas = globalAny.userQuotas as Map<string, { usage: number, pin: string }>;
-  
-  // Convert Map to Array of objects for JSON serialization
-  const quotasList = Array.from(userQuotas.entries()).map(([nickname, data]) => ({
+  // Convert object to Array for JSON serialization
+  const quotasList = Object.entries(quotas).map(([nickname, data]) => ({
     nickname,
     usage: data.usage,
     pin: data.pin,

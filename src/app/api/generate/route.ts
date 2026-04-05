@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { getQuotas, saveQuotas } from '@/lib/quotaStore';
 
 // Initialize the SDK for Vertex AI
 // We use the 'global' location because gemini-3.1-flash-image-preview is deployed there
@@ -9,12 +10,6 @@ const ai = new GoogleGenAI({
   location: process.env.GOOGLE_CLOUD_LOCATION || 'global' 
 });
 
-// Simple in-memory quota tracking for MVP
-const globalAny: any = global;
-if (!globalAny.userQuotas) {
-  globalAny.userQuotas = new Map<string, { usage: number, pin: string }>();
-}
-const userQuotas = globalAny.userQuotas as Map<string, { usage: number, pin: string }>;
 const MAX_QUOTA = 20;
 
 export async function POST(request: Request) {
@@ -26,8 +21,9 @@ export async function POST(request: Request) {
     }
 
     // Check Quota
+    const quotas = getQuotas();
     const userId = user.nickname; // Using nickname as simple ID for MVP
-    const userData = userQuotas.get(userId) || { usage: 0, pin: user.pin };
+    const userData = quotas[userId] || { usage: 0, pin: user.pin };
     const currentUsage = userData.usage;
     
     if (currentUsage >= MAX_QUOTA) {
@@ -38,7 +34,8 @@ export async function POST(request: Request) {
 
     // Ensure PIN is always up to date if they somehow login with a new one
     userData.pin = user.pin;
-    userQuotas.set(userId, userData);
+    quotas[userId] = userData;
+    saveQuotas(quotas);
 
     console.log(`Generating image for ${user.nickname}: ${prompt}`);
 
@@ -71,8 +68,13 @@ export async function POST(request: Request) {
     const imageUrl = `data:${mimeType};base64,${base64Image}`;
 
     // Update Quota after successful generation
-    const newUsage = currentUsage + 1;
-    userQuotas.set(userId, { usage: newUsage, pin: user.pin });
+    // Read again to avoid overwriting parallel requests made during generation
+    const finalQuotas = getQuotas();
+    const finalUserData = finalQuotas[userId] || { usage: currentUsage, pin: user.pin };
+    const newUsage = finalUserData.usage + 1;
+    finalQuotas[userId] = { usage: newUsage, pin: user.pin };
+    saveQuotas(finalQuotas);
+    
     const remainingQuota = MAX_QUOTA - newUsage;
 
     return NextResponse.json({ imageUrl, remainingQuota });
