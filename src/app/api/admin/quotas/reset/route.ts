@@ -27,7 +27,18 @@ export async function POST(request: Request) {
        return NextResponse.json({ success: true, message: `Student ${nickname} removed` });
     }
 
-    // Reset specific user by setting usage
+    if (action === 'ADD') {
+        const existing = quotas[nickname];
+        if (existing) {
+            // "Adding" quota means subtracting from usage. Don't let usage go below 0.
+            const newUsage = Math.max(0, existing.usage - targetAmount);
+            quotas[nickname] = { usage: newUsage, pin: existing.pin };
+            saveQuotas(quotas);
+        }
+        return NextResponse.json({ success: true, message: `Added ${targetAmount} quota to ${nickname}` });
+    }
+
+    // Default action: RESET
     const existing = quotas[nickname];
     if (existing) {
         quotas[nickname] = { usage: targetUsage, pin: existing.pin };

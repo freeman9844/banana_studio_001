@@ -46,8 +46,15 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  const handleReset = async (nickname: string, amount: number = 20) => {
-    if (!confirm(nickname === 'ALL' ? `모든 학생의 마법 횟수를 ${amount}번으로 초기화하시겠습니까?` : `[${nickname}] 학생의 횟수를 ${amount}번으로 설정하시겠습니까?`)) {
+  const handleReset = async (nickname: string, amount: number = 20, actionType: 'RESET' | 'ADD' = 'RESET') => {
+    let confirmMsg = '';
+    if (actionType === 'RESET') {
+       confirmMsg = nickname === 'ALL' ? `모든 학생의 마법 횟수를 ${amount}번으로 초기화하시겠습니까?` : `[${nickname}] 학생의 횟수를 ${amount}번으로 설정하시겠습니까?`;
+    } else {
+       confirmMsg = `[${nickname}] 학생에게 마법 횟수 ${amount}번을 추가로 충전해주시겠습니까?`;
+    }
+
+    if (!confirm(confirmMsg)) {
       return;
     }
 
@@ -55,13 +62,13 @@ export default function AdminDashboard() {
       const res = await fetch('/api/admin/quotas/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname, action: 'RESET', amount })
+        body: JSON.stringify({ nickname, action: actionType, amount })
       });
       
       if (res.ok) {
         fetchQuotas(); // Refresh immediately
       } else {
-        alert('초기화에 실패했습니다.');
+        alert('충전에 실패했습니다.');
       }
     } catch (error) {
       console.error("Reset failed", error);
@@ -174,14 +181,14 @@ export default function AdminDashboard() {
                   </td>
                   <td className="p-4 text-right flex justify-end gap-2">
                     <button 
-                      onClick={() => handleReset(q.nickname, 5)}
+                      onClick={() => handleReset(q.nickname, 5, 'ADD')}
                       className="bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-semibold py-2 px-3 rounded-lg text-sm transition shadow-sm border border-yellow-200"
                       title="마법 5번 충전"
                     >
                       5번 충전 ⚡
                     </button>
                     <button 
-                      onClick={() => handleReset(q.nickname, 20)}
+                      onClick={() => handleReset(q.nickname, 20, 'RESET')}
                       className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-3 rounded-lg text-sm transition shadow-sm border border-blue-200"
                       title="마법 20번(가득) 충전"
                     >
