@@ -1,9 +1,13 @@
 import fs from 'fs/promises';
 import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
+import { Storage } from '@google-cloud/storage';
 
 const dataFilePath = path.join(process.cwd(), 'data', 'quotas.json');
 const configFilePath = path.join(process.cwd(), 'data', 'config.json');
+
+const storage = new Storage();
+const bucketName = process.env.GCS_BUCKET_NAME;
 
 // Ensure directory exists synchronously at startup
 if (!existsSync(path.dirname(dataFilePath))) {
@@ -24,22 +28,53 @@ export interface QuotaData {
   [nickname: string]: UserQuota;
 }
 
-export async function getConfig(): Promise<GlobalConfig> {
+async function readFromFileOrGcs<T>(filePath: string, gcsFileName: string, fallbackData: T): Promise<T> {
   try {
-    const fileContent = await fs.readFile(configFilePath, 'utf-8');
-    const parsed = JSON.parse(fileContent);
-    return {
-      maxQuota: parsed.maxQuota || 20,
-      resolution: parsed.resolution || '1024'
-    };
+    const fileContent = await fs.readFile(filePath, 'utf-8');
+    return JSON.parse(fileContent);
   } catch (error: unknown) {
-    // Default fallback if not exists or invalid
-    return { maxQuota: 20, resolution: '1024' };
+    if (typeof error === 'object' && error !== null && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if (bucketName) {
+        try {
+          const [content] = await storage.bucket(bucketName).file(gcsFileName).download();
+          const parsed = JSON.parse(content.toString('utf-8'));
+          await fs.writeFile(filePath, content.toString('utf-8'), 'utf-8');
+          return parsed;
+        } catch (_gcsError) {
+          return fallbackData;
+        }
+      }
+      return fallbackData;
+    }
+    console.error(`Error reading ${gcsFileName} file:`, error);
+    return fallbackData;
   }
 }
 
+async function writeToFileAndGcs<T>(filePath: string, gcsFileName: string, data: T): Promise<void> {
+  const content = JSON.stringify(data, null, 2);
+  await fs.writeFile(filePath, content, 'utf-8');
+  
+  if (bucketName) {
+    try {
+      await storage.bucket(bucketName).file(gcsFileName).save(content);
+    } catch (error) {
+      console.error(`Error saving ${gcsFileName} to GCS:`, error);
+    }
+  }
+}
+
+export async function getConfig(): Promise<GlobalConfig> {
+  const defaultFallback: GlobalConfig = { maxQuota: 20, resolution: '1024' };
+  const parsed = await readFromFileOrGcs(configFilePath, 'config.json', defaultFallback);
+  return {
+    maxQuota: parsed.maxQuota || 20,
+    resolution: parsed.resolution || '1024'
+  };
+}
+
 export async function saveConfig(config: GlobalConfig): Promise<void> {
-  await fs.writeFile(configFilePath, JSON.stringify(config, null, 2), 'utf-8');
+  await writeToFileAndGcs(configFilePath, 'config.json', config);
 }
 
 // Simple in-memory mutex to prevent race conditions on a single Node instance
@@ -57,20 +92,11 @@ class Mutex {
 const fileMutex = new Mutex();
 
 export async function getQuotas(): Promise<QuotaData> {
-  try {
-    const fileContent = await fs.readFile(dataFilePath, 'utf-8');
-    return JSON.parse(fileContent);
-  } catch (error: unknown) {
-    if (typeof error === 'object' && error !== null && (error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return {};
-    }
-    console.error("Error reading quotas file:", error);
-    return {};
-  }
+  return await readFromFileOrGcs(dataFilePath, 'quotas.json', {});
 }
 
 export async function saveQuotas(data: QuotaData): Promise<void> {
-  await fs.writeFile(dataFilePath, JSON.stringify(data, null, 2), 'utf-8');
+  await writeToFileAndGcs(dataFilePath, 'quotas.json', data);
 }
 
 export async function updateQuotaSafely(

@@ -9,11 +9,13 @@ set -e
 PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-"jwlee-argolis-202104"}
 REGION=${GOOGLE_CLOUD_LOCATION:-"us-central1"}
 SERVICE_NAME=${SERVICE_NAME:-"banana-studio"}
+BUCKET_NAME="${PROJECT_ID}-banana-studio-data"
 
 echo "🚀 Deploying Banana Studio to Cloud Run..."
 echo "Project: $PROJECT_ID"
 echo "Region: $REGION"
 echo "Service: $SERVICE_NAME"
+echo "Bucket: $BUCKET_NAME"
 echo "------------------------------------------------------"
 
 # Check if gcloud is installed
@@ -28,10 +30,13 @@ gcloud config set project "$PROJECT_ID"
 echo "📦 Enabling required APIs (Cloud Run, Cloud Build, Artifact Registry)..."
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com --project="$PROJECT_ID"
 
-echo "⚠️ Note: Banana Studio currently uses local file storage (data/quotas.json)."
-echo "   Since Cloud Run is stateless, quotas and student records will reset"
-echo "   whenever the container instance is restarted or scaled."
-echo "   (For permanent data, migrate to Firestore or Cloud SQL later)."
+echo "🪣 Setting up GCS bucket for persistent storage..."
+if ! gsutil ls -b "gs://$BUCKET_NAME" &>/dev/null; then
+    gsutil mb -l "$REGION" -p "$PROJECT_ID" "gs://$BUCKET_NAME"
+    echo "✅ Bucket created: gs://$BUCKET_NAME"
+else
+    echo "✅ Bucket already exists: gs://$BUCKET_NAME"
+fi
 echo "------------------------------------------------------"
 
 echo "🚢 Building and deploying..."
@@ -41,6 +46,6 @@ gcloud run deploy "$SERVICE_NAME" \
   --region "$REGION" \
   --project "$PROJECT_ID" \
   --allow-unauthenticated \
-  --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=$REGION"
+  --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=$REGION,GCS_BUCKET_NAME=$BUCKET_NAME"
 
 echo "✅ Deployment complete!"
