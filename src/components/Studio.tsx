@@ -1,16 +1,23 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface StudioProps {
   onGenerate: (prompt: string) => Promise<{imageUrl: string, remainingQuota: number}>;
+  initialQuota?: number;
 }
 
-export default function Studio({ onGenerate }: StudioProps) {
+export default function Studio({ onGenerate, initialQuota = 20 }: StudioProps) {
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [quota, setQuota] = useState<number>(20);
+  const [quota, setQuota] = useState<number>(initialQuota);
+
+  // Sync quota if it changes from the parent component (e.g. via polling/admin update)
+  useEffect(() => {
+    setQuota(initialQuota);
+  }, [initialQuota]);
 
   const handleGenerate = async () => {
     if (!prompt.trim() || quota <= 0) return;
@@ -23,8 +30,12 @@ export default function Studio({ onGenerate }: StudioProps) {
       if (result.remainingQuota !== undefined) {
         setQuota(result.remainingQuota);
       }
-    } catch (error: any) {
-      alert(`그림을 그리는 중 문제가 생겼어요: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        alert(`그림을 그리는 중 문제가 생겼어요: ${error.message}`);
+      } else {
+        alert('그림을 그리는 중 알 수 없는 문제가 생겼어요.');
+      }
     } finally {
       setIsLoading(false);
     }

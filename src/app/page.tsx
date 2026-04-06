@@ -1,62 +1,63 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import useSWR from 'swr';
 import Login from "@/components/Login";
 import Studio from "@/components/Studio";
 import Link from "next/link";
 
+const fetcher = (url: string) => fetch(url).then(res => res.json());
+
 export default function Home() {
-  const [user, setUser] = useState<{ nickname: string; pin: string } | null>(null);
+  const [user, setUser] = useState<{ nickname: string, pin: string } | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  const [initialQuota, setInitialQuota] = useState(20);
+  const { data: quotaData, mutate } = useSWR(
+    user ? `/api/quota?nickname=${encodeURIComponent(user.nickname)}` : null, 
+    fetcher, 
+    { refreshInterval: 5000 }
+  );
 
-  // Load saved user from localStorage on initial render
+  const currentQuota = quotaData?.remainingQuota ?? 20;
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
     const savedUser = localStorage.getItem('banana_studio_user');
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
         setUser(parsedUser);
-        // Fetch current quota after successful reload
-        fetchCurrentQuota(parsedUser.nickname).then(q => setInitialQuota(q));
       } catch (e) {
         console.error("Failed to parse saved user", e);
       }
     }
   }, []);
 
-  const fetchCurrentQuota = async (nickname: string) => {
-     try {
-       const res = await fetch(`/api/quota?nickname=${encodeURIComponent(nickname)}`);
-       if (res.ok) {
-         const data = await res.json();
-         return data.remainingQuota;
-       }
-     } catch (e) {
-       console.error("Failed to fetch quota", e);
-     }
-     return 20; // Default fallback
-  };
-
   const handleLogin = async (nickname: string, pin: string) => {
     const userData = { nickname, pin };
-    setUser(userData);
-    localStorage.setItem('banana_studio_user', JSON.stringify(userData));
-    setInitialQuota(20); // Reset for new user
 
-    // Register or update the student in the backend so they appear on the admin dashboard immediately
     try {
-      await fetch('/api/register', {
+      const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData),
       });
-      // Fetch latest in case they were already registered before
-      fetchCurrentQuota(nickname).then(q => setInitialQuota(q));
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        alert(data.error || '로그인에 실패했습니다.');
+        return;
+      }
+
+      // Only log in if server validated the credentials
+      setUser(userData);
+      localStorage.setItem('banana_studio_user', JSON.stringify(userData));
+      mutate();
     } catch (error) {
-      console.error("Failed to register student on login", error);
+      console.error("Failed to register/login student", error);
+      alert('서버 통신 중 오류가 발생했습니다.');
     }
   };
 
@@ -107,7 +108,7 @@ export default function Home() {
           <div className="mb-6 text-green-700 font-extrabold text-2xl drop-shadow-sm flex items-center justify-center">
             환영합니다, <span className="text-blue-600 mx-2 text-3xl">{user.nickname}</span>님! ✨
           </div>
-          <Studio onGenerate={handleGenerate} initialQuota={initialQuota} />
+          <Studio onGenerate={handleGenerate} initialQuota={currentQuota} />
         </div>
       )}
     </div>

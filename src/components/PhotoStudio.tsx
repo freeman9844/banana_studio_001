@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -53,8 +54,12 @@ export default function PhotoStudio({ onGenerate, initialQuota = 20 }: PhotoStud
       if (result.remainingQuota !== undefined) {
         setQuota(result.remainingQuota);
       }
-    } catch (error: any) {
-      alert(`그림을 그리는 중 문제가 생겼어요: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        alert(`그림을 그리는 중 문제가 생겼어요: ${error.message}`);
+      } else {
+        alert('그림을 그리는 중 알 수 없는 문제가 생겼어요.');
+      }
     } finally {
       setIsLoading(false);
     }

@@ -1,19 +1,26 @@
 import { NextResponse } from 'next/server';
-import { getQuotas, saveQuotas } from '@/lib/quotaStore';
+import { updateAllQuotasSafely, getConfig } from '@/lib/quotaStore';
+import { cookies } from 'next/headers';
 
 export async function POST(request: Request) {
+  const cookieStore = await cookies();
+  if (!cookieStore.get('admin_session')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { nickname, action, amount } = await request.json();
-    const quotas = getQuotas();
-    const targetAmount = amount === undefined ? 20 : amount;
-    const targetUsage = 20 - targetAmount;
+    const config = await getConfig();
+    const targetAmount = amount === undefined ? config.maxQuota : amount;
+    const targetUsage = config.maxQuota - targetAmount;
 
     if (nickname === 'ALL') {
        // Reset everyone
-       Object.keys(quotas).forEach(key => {
-           quotas[key].usage = targetUsage;
+       await updateAllQuotasSafely((quotas) => {
+           Object.keys(quotas).forEach(key => {
+               quotas[key].usage = targetUsage;
+           });
        });
-       saveQuotas(quotas);
        return NextResponse.json({ success: true, message: `All quotas reset to ${targetAmount}` });
     }
 
@@ -22,31 +29,37 @@ export async function POST(request: Request) {
     }
 
     if (action === 'DELETE') {
-       delete quotas[nickname];
-       saveQuotas(quotas);
+       await updateAllQuotasSafely((quotas) => {
+           delete quotas[nickname];
+       });
        return NextResponse.json({ success: true, message: `Student ${nickname} removed` });
     }
 
     if (action === 'ADD') {
-        const existing = quotas[nickname];
-        if (existing) {
-            // "Adding" quota means subtracting from usage. Don't let usage go below 0.
-            const newUsage = Math.max(0, existing.usage - targetAmount);
-            quotas[nickname] = { usage: newUsage, pin: existing.pin };
-            saveQuotas(quotas);
-        }
+        await updateAllQuotasSafely((quotas) => {
+            const existing = quotas[nickname];
+            if (existing) {
+                // "Adding" quota means subtracting from usage. Don't let usage go below 0.
+                const newUsage = Math.max(0, existing.usage - targetAmount);
+                quotas[nickname] = { usage: newUsage, pin: existing.pin };
+            }
+        });
         return NextResponse.json({ success: true, message: `Added ${targetAmount} quota to ${nickname}` });
     }
 
     // Default action: RESET
-    const existing = quotas[nickname];
-    if (existing) {
-        quotas[nickname] = { usage: targetUsage, pin: existing.pin };
-        saveQuotas(quotas);
-    }
+    await updateAllQuotasSafely((quotas) => {
+        const existing = quotas[nickname];
+        if (existing) {
+            quotas[nickname] = { usage: targetUsage, pin: existing.pin };
+        }
+    });
 
     return NextResponse.json({ success: true, message: `Quota reset for ${nickname}` });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ error: 'Unknown error' }, { status: 500 });
   }
 }

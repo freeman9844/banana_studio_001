@@ -1,36 +1,33 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import useSWR from 'swr';
 import Login from "@/components/Login";
 import PhotoStudio from "@/components/PhotoStudio";
 import Link from "next/link";
 
+const fetcher = (url: string) => fetch(url).then(res => res.json());
+
 export default function PhotoPage() {
   const [user, setUser] = useState<{ nickname: string; pin: string } | null>(null);
   const [isMounted, setIsMounted] = useState(false);
-  const [initialQuota, setInitialQuota] = useState(20);
 
-  const fetchCurrentQuota = async (nickname: string) => {
-     try {
-       const res = await fetch(`/api/quota?nickname=${encodeURIComponent(nickname)}`);
-       if (res.ok) {
-         const data = await res.json();
-         return data.remainingQuota;
-       }
-     } catch (e) {
-       console.error("Failed to fetch quota", e);
-     }
-     return 20; // Default fallback
-  };
+  const { data: quotaData, mutate } = useSWR(
+    user ? `/api/quota?nickname=${encodeURIComponent(user.nickname)}` : null, 
+    fetcher, 
+    { refreshInterval: 5000 }
+  );
+
+  const currentQuota = quotaData?.remainingQuota ?? 20;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
     const savedUser = localStorage.getItem('banana_studio_user');
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
         setUser(parsedUser);
-        fetchCurrentQuota(parsedUser.nickname).then(q => setInitialQuota(q));
       } catch (e) {
         console.error("Failed to parse saved user", e);
       }
@@ -39,19 +36,27 @@ export default function PhotoPage() {
 
   const handleLogin = async (nickname: string, pin: string) => {
     const userData = { nickname, pin };
-    setUser(userData);
-    localStorage.setItem('banana_studio_user', JSON.stringify(userData));
-    setInitialQuota(20); // Reset for new user
 
     try {
-      await fetch('/api/register', {
+      const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData),
       });
-      fetchCurrentQuota(nickname).then(q => setInitialQuota(q));
+
+      const data = await res.json();
+      
+      if (!res.ok) {
+        alert(data.error || '로그인에 실패했습니다.');
+        return;
+      }
+
+      setUser(userData);
+      localStorage.setItem('banana_studio_user', JSON.stringify(userData));
+      mutate();
     } catch (error) {
-      console.error("Failed to register student on login", error);
+      console.error("Failed to register/login student", error);
+      alert('서버 통신 중 오류가 발생했습니다.');
     }
   };
 
@@ -106,7 +111,7 @@ export default function PhotoPage() {
           <div className="mb-2 text-blue-700 font-extrabold text-2xl drop-shadow-sm flex items-center justify-center">
             <span className="text-green-600 mx-2 text-3xl">{user.nickname}</span>의 마법 사진관 🖼️
           </div>
-          <PhotoStudio onGenerate={handleGenerate} initialQuota={initialQuota} />
+          <PhotoStudio onGenerate={handleGenerate} initialQuota={currentQuota} />
         </div>
       )}
     </div>

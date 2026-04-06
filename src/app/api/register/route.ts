@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getQuotas, saveQuotas } from '@/lib/quotaStore';
+import { getQuotas, updateQuotaSafely } from '@/lib/quotaStore';
 
 export async function POST(request: Request) {
   try {
@@ -9,23 +9,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nickname and pin are required' }, { status: 400 });
     }
 
-    const quotas = getQuotas();
-    
-    // If the user already exists, update their PIN but keep usage.
-    // If they don't exist, create a new record with 0 usage.
+    const quotas = await getQuotas();
     const existingUser = quotas[nickname];
     
+    // Validate PIN if user already exists
     if (existingUser) {
-      quotas[nickname] = { usage: existingUser.usage, pin: pin };
-    } else {
-      quotas[nickname] = { usage: 0, pin: pin };
+      if (existingUser.pin !== pin) {
+        return NextResponse.json({ error: '등록된 별명입니다. 올바른 PIN을 입력해주세요.' }, { status: 401 });
+      }
+      // If PIN matches, just return success without modifying usage
+      return NextResponse.json({ success: true, message: `Student ${nickname} logged in` });
     }
 
-    saveQuotas(quotas);
+    // Register new user safely
+    await updateQuotaSafely(nickname, () => {
+      return { usage: 0, pin: pin };
+    });
 
-    return NextResponse.json({ success: true, message: `Student ${nickname} registered/updated` });
-  } catch (error: any) {
-    console.error('Error registering student:', error);
-    return NextResponse.json({ error: error.message || 'Failed to register student' }, { status: 500 });
+    return NextResponse.json({ success: true, message: `Student ${nickname} registered` });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error('Error registering student:', error.message);
+      return NextResponse.json({ error: error.message || 'Failed to register student' }, { status: 500 });
+    }
+    return NextResponse.json({ error: 'Unknown error occurred' }, { status: 500 });
   }
 }

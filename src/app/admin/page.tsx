@@ -9,27 +9,53 @@ interface QuotaData {
   pin?: string;
 }
 
+interface GlobalConfig {
+  maxQuota: number;
+  resolution: '512' | '1024';
+}
+
 export default function AdminDashboard() {
   const [quotas, setQuotas] = useState<QuotaData[]>([]);
+  const [globalConfig, setGlobalConfig] = useState<GlobalConfig>({ maxQuota: 20, resolution: '1024' });
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [adminId, setAdminId] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminId === 'admin' && adminPassword === 'admin') {
-      setIsAuthenticated(true);
-    } else {
-      alert('관리자 아이디 또는 비밀번호가 틀렸습니다.');
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: adminId, password: adminPassword })
+      });
+      if (res.ok) {
+        setIsAuthenticated(true);
+        fetchQuotas();
+      } else {
+        alert('관리자 아이디 또는 비밀번호가 틀렸습니다.');
+      }
+    } catch (error) {
+      console.error('Login error', error);
+      alert('로그인 처리 중 오류가 발생했습니다.');
     }
   };
 
   const fetchQuotas = async () => {
     try {
       const res = await fetch('/api/admin/quotas');
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        setIsLoading(false);
+        return;
+      }
+      setIsAuthenticated(true);
       const data = await res.json();
       setQuotas(data.quotas || []);
+      if (data.config) {
+        setGlobalConfig(data.config);
+      }
     } catch (error) {
       console.error("Failed to fetch quotas", error);
     } finally {
@@ -38,13 +64,35 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) return;
-    
     fetchQuotas();
     // Poll every 5 seconds to keep dashboard updated
-    const interval = setInterval(fetchQuotas, 5000);
+    const interval = setInterval(() => {
+      if (isAuthenticated) fetchQuotas();
+    }, 5000);
     return () => clearInterval(interval);
   }, [isAuthenticated]);
+
+  const handleGlobalSettingChange = async (field: 'maxQuota' | 'resolution', value: string | number) => {
+    const newConfig = { ...globalConfig, [field]: value };
+    setGlobalConfig(newConfig); // Optimistic UI update
+
+    try {
+      const res = await fetch('/api/admin/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newConfig)
+      });
+      if (!res.ok) {
+        alert('설정 변경에 실패했습니다.');
+        fetchQuotas(); // Revert
+      } else {
+        fetchQuotas(); // Refresh
+      }
+    } catch (error) {
+      console.error("Setting change failed", error);
+      fetchQuotas(); // Revert
+    }
+  };
 
   const handleReset = async (nickname: string, amount: number = 20, actionType: 'RESET' | 'ADD' = 'RESET') => {
     let confirmMsg = '';
@@ -132,14 +180,46 @@ export default function AdminDashboard() {
 
   return (
     <div className="w-full max-w-4xl mx-auto p-8 bg-white rounded-3xl shadow-xl mt-8">
-      <div className="flex justify-between items-center mb-8 border-b pb-4">
+      <div className="flex justify-between items-center mb-6 border-b pb-4">
         <h1 className="text-3xl font-bold text-gray-800">👨‍🏫 선생님 관리자 화면</h1>
         <button 
-          onClick={() => handleReset('ALL')}
+          onClick={() => handleReset('ALL', globalConfig.maxQuota)}
           className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-xl transition shadow-md"
         >
           전체 횟수 초기화 🔄
         </button>
+      </div>
+
+      <div className="bg-gray-50 rounded-xl p-6 mb-8 shadow-sm border border-gray-100">
+        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+          ⚙️ 전체 학생 공통 설정
+        </h2>
+        <div className="flex flex-col sm:flex-row gap-6">
+          <div className="flex flex-col flex-1">
+            <label className="font-semibold text-gray-700 mb-2">마법 한도 (하루)</label>
+            <select 
+              className="border rounded-lg p-2 text-md bg-white shadow-sm"
+              value={globalConfig.maxQuota}
+              onChange={(e) => handleGlobalSettingChange('maxQuota', Number(e.target.value))}
+            >
+              <option value={1}>1번</option>
+              <option value={5}>5번</option>
+              <option value={10}>10번</option>
+              <option value={20}>20번</option>
+            </select>
+          </div>
+          <div className="flex flex-col flex-1">
+            <label className="font-semibold text-gray-700 mb-2">그림 화질</label>
+            <select 
+              className="border rounded-lg p-2 text-md bg-white shadow-sm"
+              value={globalConfig.resolution}
+              onChange={(e) => handleGlobalSettingChange('resolution', e.target.value)}
+            >
+              <option value="1024">고화질 (1k)</option>
+              <option value="512">저화질 (0.5k)</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {isLoading && quotas.length === 0 ? (
@@ -169,10 +249,10 @@ export default function AdminDashboard() {
                     <div className="w-full bg-gray-200 rounded-full h-4 max-w-[200px] shadow-inner">
                       <div 
                         className={`h-4 rounded-full transition-all duration-500 ${q.remaining <= 5 ? 'bg-red-500' : 'bg-green-500'}`} 
-                        style={{ width: `${(q.usage / 20) * 100}%` }}
+                        style={{ width: `${Math.min(100, (q.usage / globalConfig.maxQuota) * 100)}%` }}
                       ></div>
                     </div>
-                    <span className="text-xs font-semibold text-gray-500 mt-1 inline-block">{q.usage} / 20</span>
+                    <span className="text-xs font-semibold text-gray-500 mt-1 inline-block">{q.usage} / {globalConfig.maxQuota}</span>
                   </td>
                   <td className="p-4">
                     <span className={`font-bold px-3 py-1 rounded-full text-sm shadow-sm ${q.remaining <= 5 ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
