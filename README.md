@@ -28,7 +28,7 @@
 
 - **프론트엔드 (Frontend):** React, Next.js (App Router), Tailwind CSS, SWR
 - **백엔드 (Backend):** Next.js API Routes
-- **데이터베이스 (DB):** 로컬 파일 시스템 (JSON 기반). `fs/promises`와 In-memory Mutex Lock을 적용하여 동시 생성 요청 시의 데이터 유실(Race Condition)을 방지했습니다.
+- **데이터베이스 (DB) 및 스토리지:** 로컬 파일 시스템 (JSON 기반) + **Google Cloud Storage (GCS)** 하이브리드. `fs/promises`와 In-memory Mutex Lock을 적용하여 동시성 문제를 방지하고, 서버리스 환경(Cloud Run)의 Stateless 제약을 극복하기 위해 GCS에 데이터를 자동 동기화(백업 및 복구)합니다.
 - **AI 연동:** `@google/genai` (Gemini 3.1 Flash Image Preview)
 
 ---
@@ -48,6 +48,9 @@ npm install
 GOOGLE_CLOUD_PROJECT=your-gcp-project-id
 GOOGLE_CLOUD_LOCATION=global
 
+# 클라우드 스토리지 데이터 백업 설정 (Cloud Run 배포 시 필요)
+GCS_BUCKET_NAME=your-gcs-bucket-name
+
 # 관리자(선생님) 페이지 로그인 설정 (선택 사항, 기본값은 admin / admin)
 ADMIN_ID=your_admin_id
 ADMIN_PASSWORD=your_admin_password
@@ -62,8 +65,23 @@ npm run dev
 
 ---
 
+## ☁️ 클라우드 런(Cloud Run) 배포 방법
+
+프로젝트에 포함된 `deploy.sh` 스크립트를 사용하여 Google Cloud Run에 쉽게 배포할 수 있습니다. 해당 스크립트는 컨테이너 빌드, 배포뿐만 아니라 데이터 영속성을 위한 GCS 버킷 생성까지 자동화합니다.
+
+```bash
+# 기본 설정으로 배포
+./deploy.sh
+```
+
+- **주의:** 스크립트 실행 전 `gcloud` CLI 설치 및 인증(`gcloud auth login`)이 완료되어 있어야 합니다.
+
+---
+
 ## 🛠 최근 개선 사항 (Changelog)
 
+- **서버리스 데이터 영속성 (GCS 하이브리드):** Cloud Run과 같은 Stateless 환경에서도 학생 데이터 및 설정이 초기화되지 않도록 Local File + Google Cloud Storage(GCS) 동기화 로직 추가.
+- **클라우드 런 배포 자동화:** 손쉬운 GCP 배포를 위한 `deploy.sh` 스크립트 제공.
 - **보안 및 인증 강화:** 관리자 페이지 무단 접근 방지 로직 (Server-side Session) 및 PIN 번호 기반의 학생 로그인 검증 로직 추가.
 - **동시성 문제(Race Condition) 해결:** JSON 파일 쓰기 시 Node.js 메모리 뮤텍스를 적용하여 다수 사용자의 동시 호출 시 파일 덮어쓰기 문제 해결.
 - **SWR 라이브러리 도입:** 비효율적인 `setInterval` 폴링 대신 SWR을 활용하여 지능적이고 실시간인 할당량 UI 업데이트 구현.
@@ -73,5 +91,5 @@ npm run dev
 ---
 
 ## 📝 데이터 구조 (Data Location)
-- 이 프로젝트는 DB 연동 없이 빠르고 가볍게 사용하기 위해 `data/quotas.json` 및 `data/config.json` 파일을 사용하여 사용량 및 환경 설정을 저장합니다. 
-- 배포(Serverless 환경 등) 시 데이터 영속성을 원하신다면, Vercel KV(Redis)나 Supabase 등으로의 DB 연동 마이그레이션이 필요합니다.
+- 이 프로젝트는 DB 구축의 복잡함을 덜기 위해 `data/quotas.json` 및 `data/config.json` 파일을 사용하여 사용량 및 환경 설정을 관리합니다.
+- 변경된 데이터는 자동으로 GCS 버킷에 동기화되므로 컨테이너가 재시작되어도 기존 데이터를 GCS에서 복원하여 안전하게 유지합니다.

@@ -6,7 +6,7 @@ import { Storage } from '@google-cloud/storage';
 const dataFilePath = path.join(process.cwd(), 'data', 'quotas.json');
 const configFilePath = path.join(process.cwd(), 'data', 'config.json');
 
-const storage = new Storage();
+const storage = new Storage({ projectId: process.env.GOOGLE_CLOUD_PROJECT });
 const bucketName = process.env.GCS_BUCKET_NAME;
 
 // Ensure directory exists synchronously at startup
@@ -39,8 +39,9 @@ async function readFromFileOrGcs<T>(filePath: string, gcsFileName: string, fallb
           const [content] = await storage.bucket(bucketName).file(gcsFileName).download();
           const parsed = JSON.parse(content.toString('utf-8'));
           await fs.writeFile(filePath, content.toString('utf-8'), 'utf-8');
+          console.log(`Recovered ${gcsFileName} from GCS and cached locally.`);
           return parsed;
-        } catch (_gcsError) {
+        } catch {
           return fallbackData;
         }
       }
@@ -58,6 +59,7 @@ async function writeToFileAndGcs<T>(filePath: string, gcsFileName: string, data:
   if (bucketName) {
     try {
       await storage.bucket(bucketName).file(gcsFileName).save(content);
+      console.log(`Successfully synced ${gcsFileName} to GCS bucket ${bucketName}`);
     } catch (error) {
       console.error(`Error saving ${gcsFileName} to GCS:`, error);
     }

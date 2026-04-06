@@ -39,6 +39,12 @@ else
 fi
 echo "------------------------------------------------------"
 
+echo "⚠️ Note: Banana Studio runs on Cloud Run, which is stateless."
+echo "   It uses a hybrid storage model: Local File System + GCS."
+echo "   Student records and settings will automatically sync to:"
+echo "   gs://$BUCKET_NAME"
+echo "------------------------------------------------------"
+
 echo "🚢 Building and deploying..."
 # Use Cloud Build to build the container from the Dockerfile and deploy it
 gcloud run deploy "$SERVICE_NAME" \
