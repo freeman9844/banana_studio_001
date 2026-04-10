@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getConfig, saveConfig } from '@/lib/quotaStore';
-import { cookies } from 'next/headers';
+import { isAdminAuthenticated } from '@/lib/adminAuth';
 
 export async function GET() {
-  const cookieStore = await cookies();
-  if (!cookieStore.get('admin_session')) {
+  if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const config = await getConfig();
@@ -12,8 +11,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const cookieStore = await cookies();
-  if (!cookieStore.get('admin_session')) {
+  if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
