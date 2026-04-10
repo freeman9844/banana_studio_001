@@ -2,17 +2,20 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useToast } from '@/components/ui/ToastContext';
+import { DEFAULT_QUOTA } from '@/lib/constants';
 
 interface PhotoStudioProps {
   onGenerate: (prompt: string, imageBase64: string, mimeType: string) => Promise<{imageUrl: string, remainingQuota: number}>;
   initialQuota?: number;
 }
 
-export default function PhotoStudio({ onGenerate, initialQuota = 20 }: PhotoStudioProps) {
+export default function PhotoStudio({ onGenerate, initialQuota = DEFAULT_QUOTA }: PhotoStudioProps) {
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [quota, setQuota] = useState<number>(initialQuota);
+  const { showToast } = useToast();
   
   useEffect(() => {
     setQuota(initialQuota);
@@ -55,11 +58,12 @@ export default function PhotoStudio({ onGenerate, initialQuota = 20 }: PhotoStud
         setQuota(result.remainingQuota);
       }
     } catch (error: unknown) {
-      if (error instanceof Error) {
-        alert(`그림을 그리는 중 문제가 생겼어요: ${error.message}`);
-      } else {
-        alert('그림을 그리는 중 알 수 없는 문제가 생겼어요.');
-      }
+      showToast(
+        error instanceof Error
+          ? `그림을 그리는 중 문제가 생겼어요: ${error.message}`
+          : '그림을 그리는 중 알 수 없는 문제가 생겼어요.',
+        'error'
+      );
     } finally {
       setIsLoading(false);
     }
