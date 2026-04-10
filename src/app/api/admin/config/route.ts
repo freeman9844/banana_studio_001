@@ -19,9 +19,8 @@ export async function POST(request: Request) {
     await saveConfig(newConfig);
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    return NextResponse.json({ error: 'Unknown error' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[admin/config] POST error:', msg);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

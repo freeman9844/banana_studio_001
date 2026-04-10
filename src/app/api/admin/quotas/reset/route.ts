@@ -51,9 +51,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ success: true, message: `Quota reset for ${nickname}` });
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    return NextResponse.json({ error: 'Unknown error occurred' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[admin/reset] POST error:', msg);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
