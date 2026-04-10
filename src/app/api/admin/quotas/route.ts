@@ -13,7 +13,6 @@ export async function GET() {
   const quotasList = Object.entries(quotas).map(([nickname, data]) => ({
     nickname,
     usage: data.usage,
-    pin: data.pin,
     remaining: Math.max(0, config.maxQuota - data.usage),
   }));
 
