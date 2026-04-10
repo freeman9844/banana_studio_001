@@ -45,8 +45,8 @@ export default function AdminStudentTable({
           </tr>
         </thead>
         <tbody>
-          {quotas.map((q, i) => (
-            <tr key={i} className="border-b hover:bg-gray-50 transition">
+          {quotas.map((q) => (
+            <tr key={q.nickname} className="border-b hover:bg-gray-50 transition">
               <td className="p-4 font-bold text-lg text-blue-600">{q.nickname}</td>
               <td className="p-4">
                 <div className="w-full bg-gray-200 rounded-full h-4 max-w-[200px] shadow-inner">

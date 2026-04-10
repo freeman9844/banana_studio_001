@@ -6,7 +6,7 @@ import AdminSettings from '@/components/admin/AdminSettings';
 import AdminStudentTable from '@/components/admin/AdminStudentTable';
 import { useToast } from '@/components/ui/ToastContext';
 import { useConfirm } from '@/components/ui/ConfirmModal';
-import { DEFAULT_QUOTA } from '@/lib/constants';
+import { DEFAULT_QUOTA, QUOTA_POLL_INTERVAL } from '@/lib/constants';
 
 interface QuotaData {
   nickname: string;
@@ -52,7 +52,7 @@ export default function AdminDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: adminId, password: adminPassword }),
       });
-      if (res.ok) { setIsAuthenticated(true); fetchQuotas(); }
+      if (res.ok) { setIsAuthenticated(true); }
       else showToast('관리자 아이디 또는 비밀번호가 틀렸습니다.', 'error');
     } catch {
       showToast('로그인 처리 중 오류가 발생했습니다.', 'error');
@@ -61,7 +61,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchQuotas();
-    const interval = setInterval(() => { if (isAuthenticated) fetchQuotas(); }, 5000);
+    const interval = setInterval(() => { if (isAuthenticated) fetchQuotas(); }, QUOTA_POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [isAuthenticated, fetchQuotas]);
 
