@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useUser } from '@/hooks/useUser';
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -24,6 +23,11 @@ describe('useUser', () => {
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('restores user from localStorage on mount', async () => {
@@ -53,6 +57,7 @@ describe('useUser', () => {
     const { result } = renderHook(() => useUser());
     await waitFor(() => expect(result.current.isMounted).toBe(true));
     await act(async () => { await result.current.handleLogin('bob', '5678'); });
+    expect(mockFetch).toHaveBeenCalledWith('/api/register', expect.objectContaining({ method: 'POST' }));
     expect(result.current.user?.nickname).toBe('bob');
     expect(localStorageMock.getItem('banana_studio_user')).toContain('bob');
   });

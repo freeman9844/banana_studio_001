@@ -8,8 +8,13 @@ vi.mock('next/headers', () => ({
 describe('POST /api/admin/login', () => {
   const originalEnv = { ...process.env };
 
-  beforeEach(() => vi.clearAllMocks());
-  afterEach(() => { process.env = { ...originalEnv }; vi.resetModules(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
 
   it('returns 500 when ADMIN_ID env not set', async () => {
     delete process.env.ADMIN_ID;
@@ -27,7 +32,6 @@ describe('POST /api/admin/login', () => {
   it('returns 200 with correct credentials', async () => {
     process.env.ADMIN_ID = 'teacher';
     process.env.ADMIN_PASSWORD = 'secret123';
-    vi.resetModules();
     const { POST } = await import('@/app/api/admin/login/route');
     const req = new Request('http://localhost/api/admin/login', {
       method: 'POST',
@@ -42,7 +46,6 @@ describe('POST /api/admin/login', () => {
   it('returns 401 with wrong credentials', async () => {
     process.env.ADMIN_ID = 'teacher';
     process.env.ADMIN_PASSWORD = 'secret123';
-    vi.resetModules();
     const { POST } = await import('@/app/api/admin/login/route');
     const req = new Request('http://localhost/api/admin/login', {
       method: 'POST',
