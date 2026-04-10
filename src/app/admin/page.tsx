@@ -1,12 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import AdminLogin from '@/components/admin/AdminLogin';
+import AdminSettings from '@/components/admin/AdminSettings';
+import AdminStudentTable from '@/components/admin/AdminStudentTable';
+import { useToast } from '@/components/ui/ToastContext';
+import { useConfirm } from '@/components/ui/ConfirmModal';
+import { DEFAULT_QUOTA } from '@/lib/constants';
 
 interface QuotaData {
   nickname: string;
   usage: number;
   remaining: number;
-  pin?: string;
 }
 
 interface GlobalConfig {
@@ -16,11 +21,28 @@ interface GlobalConfig {
 
 export default function AdminDashboard() {
   const [quotas, setQuotas] = useState<QuotaData[]>([]);
-  const [globalConfig, setGlobalConfig] = useState<GlobalConfig>({ maxQuota: 20, resolution: '1024' });
+  const [globalConfig, setGlobalConfig] = useState<GlobalConfig>({ maxQuota: DEFAULT_QUOTA, resolution: '1024' });
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [adminId, setAdminId] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const { showToast } = useToast();
+  const confirm = useConfirm();
+
+  const fetchQuotas = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/quotas');
+      if (res.status === 401) { setIsAuthenticated(false); setIsLoading(false); return; }
+      setIsAuthenticated(true);
+      const data = await res.json();
+      setQuotas(data.quotas || []);
+      if (data.config) setGlobalConfig(data.config);
+    } catch {
+      showToast('데이터를 불러오는 중 오류가 발생했습니다.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [showToast]);
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,153 +50,83 @@ export default function AdminDashboard() {
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: adminId, password: adminPassword })
+        body: JSON.stringify({ id: adminId, password: adminPassword }),
       });
-      if (res.ok) {
-        setIsAuthenticated(true);
-        fetchQuotas();
-      } else {
-        alert('관리자 아이디 또는 비밀번호가 틀렸습니다.');
-      }
-    } catch (error) {
-      console.error('Login error', error);
-      alert('로그인 처리 중 오류가 발생했습니다.');
-    }
-  };
-
-  const fetchQuotas = async () => {
-    try {
-      const res = await fetch('/api/admin/quotas');
-      if (res.status === 401) {
-        setIsAuthenticated(false);
-        setIsLoading(false);
-        return;
-      }
-      setIsAuthenticated(true);
-      const data = await res.json();
-      setQuotas(data.quotas || []);
-      if (data.config) {
-        setGlobalConfig(data.config);
-      }
-    } catch (error) {
-      console.error("Failed to fetch quotas", error);
-    } finally {
-      setIsLoading(false);
+      if (res.ok) { setIsAuthenticated(true); fetchQuotas(); }
+      else showToast('관리자 아이디 또는 비밀번호가 틀렸습니다.', 'error');
+    } catch {
+      showToast('로그인 처리 중 오류가 발생했습니다.', 'error');
     }
   };
 
   useEffect(() => {
     fetchQuotas();
-    // Poll every 5 seconds to keep dashboard updated
-    const interval = setInterval(() => {
-      if (isAuthenticated) fetchQuotas();
-    }, 5000);
+    const interval = setInterval(() => { if (isAuthenticated) fetchQuotas(); }, 5000);
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, fetchQuotas]);
 
   const handleGlobalSettingChange = async (field: 'maxQuota' | 'resolution', value: string | number) => {
     const newConfig = { ...globalConfig, [field]: value };
-    setGlobalConfig(newConfig); // Optimistic UI update
-
+    setGlobalConfig(newConfig);
     try {
       const res = await fetch('/api/admin/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newConfig)
+        body: JSON.stringify(newConfig),
       });
-      if (!res.ok) {
-        alert('설정 변경에 실패했습니다.');
-        fetchQuotas(); // Revert
-      } else {
-        fetchQuotas(); // Refresh
-      }
-    } catch (error) {
-      console.error("Setting change failed", error);
-      fetchQuotas(); // Revert
+      if (!res.ok) { showToast('설정 변경에 실패했습니다.', 'error'); fetchQuotas(); }
+    } catch {
+      showToast('설정 변경 중 오류가 발생했습니다.', 'error');
+      fetchQuotas();
     }
   };
 
-  const handleReset = async (nickname: string, amount: number = 20, actionType: 'RESET' | 'ADD' = 'RESET') => {
-    let confirmMsg = '';
-    if (actionType === 'RESET') {
-       confirmMsg = nickname === 'ALL' ? `모든 학생의 마법 횟수를 ${amount}번으로 초기화하시겠습니까?` : `[${nickname}] 학생의 횟수를 ${amount}번으로 설정하시겠습니까?`;
-    } else {
-       confirmMsg = `[${nickname}] 학생에게 마법 횟수 ${amount}번을 추가로 충전해주시겠습니까?`;
-    }
+  const handleReset = async (nickname: string, amount: number, actionType: 'RESET' | 'ADD' = 'RESET') => {
+    const msg = actionType === 'RESET'
+      ? nickname === 'ALL'
+        ? `모든 학생의 마법 횟수를 ${amount}번으로 초기화하시겠습니까?`
+        : `[${nickname}] 학생의 횟수를 ${amount}번으로 설정하시겠습니까?`
+      : `[${nickname}] 학생에게 마법 횟수 ${amount}번을 충전하시겠습니까?`;
 
-    if (!confirm(confirmMsg)) {
-      return;
-    }
+    if (!(await confirm(msg))) return;
 
     try {
       const res = await fetch('/api/admin/quotas/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname, action: actionType, amount })
+        body: JSON.stringify({ nickname, action: actionType, amount }),
       });
-      
-      if (res.ok) {
-        fetchQuotas(); // Refresh immediately
-      } else {
-        alert('충전에 실패했습니다.');
-      }
-    } catch (error) {
-      console.error("Reset failed", error);
+      if (res.ok) { fetchQuotas(); showToast('완료되었습니다.', 'success'); }
+      else showToast('충전에 실패했습니다.', 'error');
+    } catch {
+      showToast('오류가 발생했습니다.', 'error');
     }
   };
 
   const handleDelete = async (nickname: string) => {
-    if (!confirm(`정말로 [${nickname}] 학생 정보를 완전히 삭제하시겠습니까? 삭제된 정보는 되돌릴 수 없습니다.`)) {
-      return;
-    }
-
+    if (!(await confirm(`정말로 [${nickname}] 학생 정보를 완전히 삭제하시겠습니까?`))) return;
     try {
       const res = await fetch('/api/admin/quotas/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname, action: 'DELETE' })
+        body: JSON.stringify({ nickname, action: 'DELETE' }),
       });
-      
-      if (res.ok) {
-        fetchQuotas(); // Refresh immediately
-      } else {
-        alert('삭제에 실패했습니다.');
-      }
-    } catch (error) {
-      console.error("Delete failed", error);
+      if (res.ok) { fetchQuotas(); showToast(`${nickname} 학생이 삭제되었습니다.`, 'success'); }
+      else showToast('삭제에 실패했습니다.', 'error');
+    } catch {
+      showToast('오류가 발생했습니다.', 'error');
     }
   };
 
   if (!isAuthenticated) {
     return (
-      <div className="w-full max-w-md mx-auto p-8 bg-white rounded-3xl shadow-xl mt-16 text-center">
-        <h2 className="text-2xl font-bold mb-6 text-gray-800">👨‍🏫 선생님 로그인</h2>
-        <form onSubmit={handleAdminLogin} className="space-y-4">
-          <div>
-            <input
-              type="text"
-              placeholder="아이디"
-              className="input-primary"
-              value={adminId}
-              onChange={(e) => setAdminId(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <input
-              type="password"
-              placeholder="비밀번호"
-              className="input-primary"
-              value={adminPassword}
-              onChange={(e) => setAdminPassword(e.target.value)}
-              required
-            />
-          </div>
-          <button type="submit" className="btn-primary w-full mt-4">
-            로그인
-          </button>
-        </form>
-      </div>
+      <AdminLogin
+        onLogin={handleAdminLogin}
+        adminId={adminId}
+        adminPassword={adminPassword}
+        onAdminIdChange={setAdminId}
+        onAdminPasswordChange={setAdminPassword}
+      />
     );
   }
 
@@ -182,112 +134,21 @@ export default function AdminDashboard() {
     <div className="w-full max-w-4xl mx-auto p-8 bg-white rounded-3xl shadow-xl mt-8">
       <div className="flex justify-between items-center mb-6 border-b pb-4">
         <h1 className="text-3xl font-bold text-gray-800">👨‍🏫 선생님 관리자 화면</h1>
-        <button 
+        <button
           onClick={() => handleReset('ALL', globalConfig.maxQuota)}
           className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-xl transition shadow-md"
         >
           전체 횟수 초기화 🔄
         </button>
       </div>
-
-      <div className="bg-gray-50 rounded-xl p-6 mb-8 shadow-sm border border-gray-100">
-        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-          ⚙️ 전체 학생 공통 설정
-        </h2>
-        <div className="flex flex-col sm:flex-row gap-6">
-          <div className="flex flex-col flex-1">
-            <label className="font-semibold text-gray-700 mb-2">마법 한도 (하루)</label>
-            <select 
-              className="border rounded-lg p-2 text-md bg-white shadow-sm"
-              value={globalConfig.maxQuota}
-              onChange={(e) => handleGlobalSettingChange('maxQuota', Number(e.target.value))}
-            >
-              <option value={1}>1번</option>
-              <option value={5}>5번</option>
-              <option value={10}>10번</option>
-              <option value={20}>20번</option>
-            </select>
-          </div>
-          <div className="flex flex-col flex-1">
-            <label className="font-semibold text-gray-700 mb-2">그림 화질</label>
-            <select 
-              className="border rounded-lg p-2 text-md bg-white shadow-sm"
-              value={globalConfig.resolution}
-              onChange={(e) => handleGlobalSettingChange('resolution', e.target.value)}
-            >
-              <option value="1024">고화질 (1k)</option>
-              <option value="512">저화질 (0.5k)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {isLoading && quotas.length === 0 ? (
-        <div className="text-center text-gray-500 py-10">데이터를 불러오는 중입니다...</div>
-      ) : quotas.length === 0 ? (
-        <div className="text-center text-gray-500 py-10">아직 마법을 사용한 학생이 없습니다.</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-100 text-gray-700">
-                <th className="p-4 rounded-tl-xl font-bold">학생 이름 (별명)</th>
-                <th className="p-4 font-bold text-center">비밀번호</th>
-                <th className="p-4 font-bold">사용 횟수</th>
-                <th className="p-4 font-bold">남은 횟수</th>
-                <th className="p-4 rounded-tr-xl text-right font-bold">관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quotas.map((q, i) => (
-                <tr key={i} className="border-b hover:bg-gray-50 transition">
-                  <td className="p-4 font-bold text-lg text-blue-600">{q.nickname}</td>
-                  <td className="p-4 text-center">
-                    <span className="font-mono bg-gray-200 px-2 py-1 rounded text-gray-700 tracking-widest">{q.pin || '----'}</span>
-                  </td>
-                  <td className="p-4">
-                    <div className="w-full bg-gray-200 rounded-full h-4 max-w-[200px] shadow-inner">
-                      <div 
-                        className={`h-4 rounded-full transition-all duration-500 ${q.remaining <= 5 ? 'bg-red-500' : 'bg-green-500'}`} 
-                        style={{ width: `${Math.min(100, (q.usage / globalConfig.maxQuota) * 100)}%` }}
-                      ></div>
-                    </div>
-                    <span className="text-xs font-semibold text-gray-500 mt-1 inline-block">{q.usage} / {globalConfig.maxQuota}</span>
-                  </td>
-                  <td className="p-4">
-                    <span className={`font-bold px-3 py-1 rounded-full text-sm shadow-sm ${q.remaining <= 5 ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
-                      {q.remaining}번
-                    </span>
-                  </td>
-                  <td className="p-4 text-right flex justify-end gap-2">
-                    <button 
-                      onClick={() => handleReset(q.nickname, 5, 'ADD')}
-                      className="bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-semibold py-2 px-3 rounded-lg text-sm transition shadow-sm border border-yellow-200"
-                      title="마법 5번 충전"
-                    >
-                      5번 충전 ⚡
-                    </button>
-                    <button 
-                      onClick={() => handleReset(q.nickname, 20, 'RESET')}
-                      className="bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-3 rounded-lg text-sm transition shadow-sm border border-blue-200"
-                      title="마법 20번(가득) 충전"
-                    >
-                      가득 충전 🔋
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(q.nickname)}
-                      className="bg-gray-100 hover:bg-red-100 hover:text-red-700 text-gray-500 font-semibold py-2 px-3 rounded-lg text-sm transition shadow-sm border border-gray-200 hover:border-red-200"
-                      title="학생 정보 삭제"
-                    >
-                      삭제 🗑️
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <AdminSettings config={globalConfig} onSettingChange={handleGlobalSettingChange} />
+      <AdminStudentTable
+        quotas={quotas}
+        config={globalConfig}
+        isLoading={isLoading}
+        onReset={handleReset}
+        onDelete={handleDelete}
+      />
     </div>
   );
 }
