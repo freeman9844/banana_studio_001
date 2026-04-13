@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import Studio from '@/components/Studio';
 import { ToastProvider } from '@/components/ui/ToastContext';
 
@@ -51,5 +51,52 @@ describe('Studio component', () => {
     renderStudio({ initialQuota: 6 });
     const badge = screen.getByText('🪄 남은 마법: 6번');
     expect(badge.className).toContain('bg-green-100');
+  });
+
+  it('shows loading state during generation', async () => {
+    let resolve: (v: { imageUrl: string; remainingQuota: number }) => void;
+    const onGenerate = vi.fn(
+      () => new Promise<{ imageUrl: string; remainingQuota: number }>((r) => { resolve = r; })
+    );
+    renderStudio({ initialQuota: 5, onGenerate });
+
+    fireEvent.change(screen.getByPlaceholderText(/우주에서/), { target: { value: 'cat' } });
+    fireEvent.click(screen.getByRole('button', { name: /그림 만들기/ }));
+
+    await waitFor(() => expect(screen.getByText(/마법의 물감을 섞고 있어요/)).toBeInTheDocument());
+
+    await act(async () => { resolve({ imageUrl: 'https://img.url/img.png', remainingQuota: 4 }); });
+  });
+
+  it('shows generated image after successful generation', async () => {
+    const onGenerate = vi.fn().mockResolvedValue({ imageUrl: 'https://img.url/img.png', remainingQuota: 4 });
+    renderStudio({ initialQuota: 5, onGenerate });
+
+    fireEvent.change(screen.getByPlaceholderText(/우주에서/), { target: { value: 'cat' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /그림 만들기/ })); });
+
+    await waitFor(() => expect(screen.getByAltText('생성된 그림')).toBeInTheDocument());
+    expect(screen.getByText('🪄 남은 마법: 4번')).toBeInTheDocument();
+  });
+
+  it('shows error toast when generation fails', async () => {
+    const onGenerate = vi.fn().mockRejectedValue(new Error('AI error'));
+    renderStudio({ initialQuota: 5, onGenerate });
+
+    fireEvent.change(screen.getByPlaceholderText(/우주에서/), { target: { value: 'cat' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /그림 만들기/ })); });
+
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledOnce());
+  });
+
+  it('updates quota when initialQuota prop changes', () => {
+    const { rerender } = renderStudio({ initialQuota: 10 });
+    expect(screen.getByText('🪄 남은 마법: 10번')).toBeInTheDocument();
+    rerender(
+      <ToastProvider>
+        <Studio onGenerate={vi.fn()} initialQuota={3} />
+      </ToastProvider>
+    );
+    expect(screen.getByText('🪄 남은 마법: 3번')).toBeInTheDocument();
   });
 });
