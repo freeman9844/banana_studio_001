@@ -18,7 +18,7 @@
   - 마법 한도(1번, 5번, 10번, 20번) 설정으로 하루에 학생들이 만들 수 있는 그림 횟수를 제어합니다.
   - 그림 화질(1k 고화질, 0.5k 저화질)을 전환하여 트래픽 및 퀄리티를 관리합니다. 변경 시 학생들에게 즉시 반영됩니다.
 - **개별 학생 관리:**
-  - 전체 학생의 실시간 사용량과 핀 번호를 목록 형태로 한눈에 조회합니다.
+  - 전체 학생의 실시간 사용량을 목록 형태로 한눈에 조회합니다. (PIN은 bcrypt 해싱으로 안전하게 저장되며 표시되지 않습니다.)
   - 개별 학생에게 마법(5번 추가, 가득 충전)을 충전해 주거나, 학생 정보를 삭제할 수 있습니다.
   - 전체 학생 횟수 일괄 초기화 버튼을 제공합니다.
 
@@ -28,8 +28,10 @@
 
 - **프론트엔드 (Frontend):** React, Next.js (App Router), Tailwind CSS, SWR
 - **백엔드 (Backend):** Next.js API Routes
-- **데이터베이스 (DB) 및 스토리지:** 로컬 파일 시스템 (JSON 기반) + **Google Cloud Storage (GCS)** 하이브리드. `fs/promises`와 In-memory Mutex Lock을 적용하여 동시성 문제를 방지하고, 서버리스 환경(Cloud Run)의 Stateless 제약을 극복하기 위해 GCS에 데이터를 자동 동기화(백업 및 복구)합니다.
+- **데이터베이스 (DB) 및 스토리지:** 로컬 파일 시스템 (JSON 기반) + **Google Cloud Storage (GCS)** 하이브리드. `fs/promises`와 In-memory Mutex Lock을 적용하여 동시성 문제를 방지하고, 서버리스 환경(Cloud Run)의 Stateless 제약을 극복하기 위해 GCS에 데이터를 자동 동기화(백업 및 복구)합니다. GCS 조건부 쓰기(낙관적 잠금)로 다중 인스턴스 환경에서의 충돌을 방지합니다.
+- **보안:** `bcryptjs`를 사용한 PIN 번호 해싱 저장 (평문 저장 없음)
 - **AI 연동:** `@google/genai` (Gemini 3.1 Flash Image Preview)
+- **테스트:** Vitest + Testing Library (54개 테스트, 주요 모듈 커버)
 
 ---
 
@@ -80,13 +82,31 @@ npm run dev
 
 ## 🛠 최근 개선 사항 (Changelog)
 
-- **서버리스 데이터 영속성 (GCS 하이브리드):** Cloud Run과 같은 Stateless 환경에서도 학생 데이터 및 설정이 초기화되지 않도록 Local File + Google Cloud Storage(GCS) 동기화 로직 추가.
+### 보안 (Security)
+- **PIN bcrypt 해싱:** 학생 PIN 번호를 `bcryptjs`로 해싱 저장. 평문 PIN이 데이터에 남지 않으며, 기존 평문 PIN은 최초 로그인 시 자동 마이그레이션됩니다.
+- **GCS 조건부 쓰기 (낙관적 잠금):** Cloud Run 다중 인스턴스 환경에서 quota 데이터 충돌을 방지하는 Generation-number 기반 낙관적 잠금 적용. 충돌 시 최대 3회 자동 재시도합니다.
+- **관리자 인증 강화:** 환경 변수 누락 시 서버 시작 단계에서 즉시 에러 처리. 관리자 세션 검증 헬퍼(`adminAuth.ts`) 분리.
+
+### 아키텍처 (Architecture)
+- **useUser 커스텀 훅:** 중복된 사용자 인증 및 쿼터 폴링 로직을 `src/hooks/useUser.ts`로 통합. 폴링 주기는 `QUOTA_POLL_INTERVAL` 상수로 관리.
+- **관리자 페이지 컴포넌트 분리:** 단일 파일이던 관리자 페이지를 `AdminLogin`, `AdminSettings`, `AdminStudentTable` 세 컴포넌트로 분리.
+- **이미지 GCS 저장:** 생성된 이미지를 GCS에 자동 저장(`src/lib/imageStore.ts`). 추후 히스토리 기능 기반 마련.
+
+### 품질 (Quality)
+- **Toast / ConfirmModal UI:** 브라우저 기본 `alert()` / `confirm()` 대화상자를 커스텀 Toast 알림과 ConfirmModal로 교체.
+- **공통 생성 핸들러:** text-to-image와 image-to-image 라우트의 중복 로직을 `generateHelpers.ts`로 통합.
+- **공통 상수 및 로거:** `src/lib/constants.ts`, `src/lib/logger.ts` 추가로 매직 넘버 및 `console.*` 직접 호출 제거.
+
+### 테스트 (Testing)
+- **Vitest 테스트 스위트 구축:** 54개 테스트 작성 (lib, hooks, API routes, components). 주요 비즈니스 로직 및 API 엔드포인트 커버.
+
+### 이전 개선 사항
+- **서버리스 데이터 영속성 (GCS 하이브리드):** Cloud Run과 같은 Stateless 환경에서도 학생 데이터 및 설정이 초기화되지 않도록 Local File + GCS 동기화 로직 추가.
 - **클라우드 런 배포 자동화:** 손쉬운 GCP 배포를 위한 `deploy.sh` 스크립트 제공.
-- **보안 및 인증 강화:** 관리자 페이지 무단 접근 방지 로직 (Server-side Session) 및 PIN 번호 기반의 학생 로그인 검증 로직 추가.
 - **동시성 문제(Race Condition) 해결:** JSON 파일 쓰기 시 Node.js 메모리 뮤텍스를 적용하여 다수 사용자의 동시 호출 시 파일 덮어쓰기 문제 해결.
-- **SWR 라이브러리 도입:** 비효율적인 `setInterval` 폴링 대신 SWR을 활용하여 지능적이고 실시간인 할당량 UI 업데이트 구현.
-- **AI API 최적화 (DRY 원칙):** 서비스 레이어(`src/services/aiService.ts`)를 분리하고 `for` 루프 기반의 안전한 Exponential Backoff 재시도 로직 도입. API 라우트 공통 검증 로직(`src/lib/quotaHelpers.ts`) 분리.
-- **선생님 전역 설정 기능 추가:** 학생 개별이 아닌 전체 시스템 차원의 화질 제어(1k / 0.5k) 및 하루 최대 한도(Max Quota) 설정 패널 추가.
+- **SWR 라이브러리 도입:** `setInterval` 폴링 대신 SWR로 지능적인 실시간 할당량 UI 업데이트 구현.
+- **AI API 최적화 (DRY 원칙):** 서비스 레이어 분리 및 Exponential Backoff 재시도 로직 도입.
+- **선생님 전역 설정 기능 추가:** 화질 제어(1k / 0.5k) 및 하루 최대 한도(Max Quota) 설정 패널 추가.
 
 ---
 
