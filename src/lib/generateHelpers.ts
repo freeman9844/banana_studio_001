@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { updateQuotaSafely, GlobalConfig } from '@/lib/quotaStore';
 import { validateUserQuota } from '@/lib/quotaHelpers';
-import { saveImageToGcs } from '@/lib/imageStore';
 import { logger } from '@/lib/logger';
 import { GeneratedImage } from '@/services/aiService';
 
@@ -24,7 +23,7 @@ export async function handleGenerateRequest(
 
   try {
     const { base64, mimeType } = await generateFn(config);
-    const imageUrl = await saveImageToGcs(base64, mimeType, userId);
+    const imageUrl = `data:${mimeType};base64,${base64}`;
 
     const finalUserData = await updateQuotaSafely(userId, (existing) => ({
       usage: (existing?.usage ?? userData.usage) + 1,
