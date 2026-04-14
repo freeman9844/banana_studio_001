@@ -52,6 +52,21 @@ gcloud run deploy "$SERVICE_NAME" \
   --region "$REGION" \
   --project "$PROJECT_ID" \
   --allow-unauthenticated \
+  --max-instances=3 \
+  --min-instances=0 \
+  --memory=512Mi \
+  --cpu=1 \
+  --concurrency=10 \
+  --timeout=30 \
   --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=$REGION,GCS_BUCKET_NAME=$BUCKET_NAME"
+
+echo "🧹 Configuring Artifact Registry cleanup policy (keep latest 5)..."
+gcloud artifacts repositories set-cleanup-policies \
+  --project="$PROJECT_ID" \
+  --location="$REGION" \
+  cloud-run-source-deploy \
+  --policy='[{"name":"keep-5","action":{"type":"Keep"},"mostRecentVersions":{"keepCount":5}}]' \
+  2>/dev/null || echo "⚠️  Cleanup policy skipped (registry may not exist yet, will apply on next deploy)"
+echo "------------------------------------------------------"
 
 echo "✅ Deployment complete!"
