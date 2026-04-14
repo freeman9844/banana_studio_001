@@ -1,11 +1,18 @@
 import { GoogleGenAI } from '@google/genai';
 import { logger } from '@/lib/logger';
 
-const ai = new GoogleGenAI({
-  vertexai: true,
-  project: process.env.GOOGLE_CLOUD_PROJECT,
-  location: process.env.GOOGLE_CLOUD_LOCATION || 'global',
-});
+let _ai: GoogleGenAI | null = null;
+
+function getAI(): GoogleGenAI {
+  if (!_ai) {
+    _ai = new GoogleGenAI({
+      vertexai: true,
+      project: process.env.GOOGLE_CLOUD_PROJECT,
+      location: process.env.GOOGLE_CLOUD_LOCATION || 'global',
+    });
+  }
+  return _ai;
+}
 
 export interface GeneratedImage {
   base64: string;
@@ -40,7 +47,7 @@ export async function generateImageWithRetry(
 
   for (let retries = 0; retries <= maxRetries; retries++) {
     try {
-      const response = await ai.models.generateContent({
+      const response = await getAI().models.generateContent({
         model: 'gemini-3.1-flash-image-preview',
         contents: promptText,
         config: {
@@ -79,7 +86,7 @@ export async function generateMultimodalWithRetry(
 
   for (let retries = 0; retries <= maxRetries; retries++) {
     try {
-      const response = await ai.models.generateContent({
+      const response = await getAI().models.generateContent({
         model: 'gemini-3.1-flash-image-preview',
         contents: [
           {

@@ -166,11 +166,12 @@ async function updateWithGcsConditionalWrite(
   let generation = 0;
 
   try {
-    const [[content], [metadata]] = await Promise.all([
+    const [[content], metadataResponse] = await Promise.all([
       file.download() as Promise<[Buffer]>,
-      file.getMetadata() as Promise<[{ generation: string }]>,
+      file.getMetadata(),
     ]);
     quotas = JSON.parse(content.toString('utf-8'));
+    const metadata = metadataResponse[0] as unknown as { generation: string };
     generation = Number(metadata.generation);
   } catch (err: unknown) {
     if ((err as { code?: number }).code !== 404) throw err;
