@@ -205,8 +205,8 @@ if [ "$SKIP_IAM" = false ]; then
   fi
 
   # IAM 역할 부여
+  # storage.objectAdmin은 특정 버킷에만 부여 (Step 5 참조) — 프로젝트 수준 부여 불필요
   declare -A IAM_ROLES=(
-    ["roles/storage.objectAdmin"]="GCS 버킷 읽기/쓰기 (데이터 영속성)"
     ["roles/aiplatform.user"]="Vertex AI Gemini 이미지 생성"
     ["roles/secretmanager.secretAccessor"]="Secret Manager 자격증명 읽기"
     ["roles/logging.logWriter"]="Cloud Logging 쓰기"
@@ -250,19 +250,10 @@ success "버킷 IAM 설정 완료"
 
 # 수명 주기 정책: 90일 이상 된 객체 자동 삭제 (이미지 정리)
 info "버킷 수명 주기 정책 설정 중 (90일 후 자동 삭제)..."
-LIFECYCLE_JSON=$(cat <<'EOF'
-{
-  "rule": [
-    {
-      "action": { "type": "Delete" },
-      "condition": { "age": 90 }
-    }
-  ]
-}
-EOF
-)
 if [ "$DRY_RUN" = false ]; then
-  echo "$LIFECYCLE_JSON" | gsutil lifecycle set /dev/stdin "gs://$BUCKET_NAME"
+  gsutil lifecycle set /dev/stdin "gs://$BUCKET_NAME" <<'EOF'
+{"rule":[{"action":{"type":"Delete"},"condition":{"age":90}}]}
+EOF
 fi
 success "수명 주기 정책 설정 완료"
 divider

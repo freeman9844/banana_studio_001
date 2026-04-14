@@ -28,7 +28,8 @@
 
 - **프론트엔드 (Frontend):** React, Next.js (App Router), Tailwind CSS, SWR
 - **백엔드 (Backend):** Next.js API Routes
-- **데이터베이스 (DB) 및 스토리지:** 로컬 파일 시스템 (JSON 기반) + **Google Cloud Storage (GCS)** 하이브리드. `fs/promises`와 In-memory Mutex Lock을 적용하여 동시성 문제를 방지하고, 서버리스 환경(Cloud Run)의 Stateless 제약을 극복하기 위해 GCS에 데이터를 자동 동기화(백업 및 복구)합니다. GCS 조건부 쓰기(낙관적 잠금)로 다중 인스턴스 환경에서의 충돌을 방지합니다.
+- **데이터베이스 (DB) 및 스토리지:** 로컬 파일 시스템 (JSON 기반) + **Google Cloud Storage (GCS)** 하이브리드. `fs/promises`와 In-memory Mutex Lock을 적용하여 동시성 문제를 방지하고, 서버리스 환경(Cloud Run)의 Stateless 제약을 극복하기 위해 GCS에 쿼터/설정 데이터를 자동 동기화합니다. GCS 조건부 쓰기(낙관적 잠금)로 다중 인스턴스 환경에서의 충돌을 방지합니다.
+- **이미지 처리:** 생성된 이미지는 Gemini API에서 base64 데이터 URL로 직접 반환되어 GCS 저장 없이 클라이언트에 전달됩니다.
 - **보안:** `bcryptjs`를 사용한 PIN 번호 해싱 저장 (평문 저장 없음)
 - **AI 연동:** `@google/genai` (Gemini 3.1 Flash Image Preview)
 - **테스트:** Vitest + Testing Library (54개 테스트, 주요 모듈 커버)
@@ -69,28 +70,71 @@ npm run dev
 
 ## ☁️ 클라우드 런(Cloud Run) 배포 방법
 
-프로젝트에 포함된 `deploy.sh` 스크립트를 사용하여 Google Cloud Run에 쉽게 배포할 수 있습니다. 해당 스크립트는 컨테이너 빌드, 배포뿐만 아니라 데이터 영속성을 위한 GCS 버킷 생성까지 자동화합니다.
+프로젝트에 포함된 `deploy.sh` 스크립트를 사용하여 Google Cloud Run에 배포합니다.  
+서비스 계정 생성, IAM 권한 부여, GCS 버킷, Secret Manager, 이미지 빌드/배포, Artifact Registry 클린업, 헬스체크까지 **전 과정을 자동화**합니다.
+
+### 사전 요구사항
+
+- `gcloud` CLI 설치 및 인증 완료
+  ```bash
+  gcloud auth login
+  gcloud auth application-default login
+  ```
+
+### 기본 배포 (최초 실행)
 
 ```bash
-# 기본 설정으로 배포
-./deploy.sh
+ADMIN_ID=teacher ADMIN_PASSWORD=secret123 ./deploy.sh
 ```
 
-- **주의:** 스크립트 실행 전 `gcloud` CLI 설치 및 인증(`gcloud auth login`)이 완료되어 있어야 합니다.
+> `ADMIN_ID` / `ADMIN_PASSWORD`는 Secret Manager에 저장됩니다. **최초 배포 시에만** 필요합니다.
+
+### 재배포 (Secret Manager 이미 설정된 경우)
+
+```bash
+./deploy.sh --skip-secrets
+```
+
+### 주요 옵션
+
+| 옵션 | 설명 |
+|------|------|
+| `--dry-run` | 실제 변경 없이 실행될 명령만 출력 |
+| `--skip-secrets` | Secret Manager 설정 건너뜀 (이미 설정된 경우) |
+| `--skip-iam` | 서비스 계정 / IAM 설정 건너뜀 |
+| `--help` | 도움말 출력 |
+
+### Cloud Run 리소스 설정
+
+| 항목 | 값 |
+|------|-----|
+| 최대 인스턴스 | 3 |
+| 최소 인스턴스 | 0 (요청 없을 때 0으로 스케일다운) |
+| 메모리 | 512 MiB |
+| CPU | 1 vCPU |
+| 동시성 | 10 요청/인스턴스 |
+| 요청 타임아웃 | 30초 |
 
 ---
 
 ## 🛠 최근 개선 사항 (Changelog)
 
+### 배포 및 인프라 (Deploy / Infra)
+- **`deploy.sh` 전면 개편:** 서비스 계정 생성, IAM 최소 권한 부여, GCS 버킷 수명 주기 정책, Secret Manager 자격증명 관리, Cloud Run 배포, Artifact Registry 클린업 정책(최신 5개 유지), 헬스체크를 단일 스크립트로 통합.
+- **IAM 최소 권한 적용:** `roles/storage.objectAdmin`을 프로젝트 전체가 아닌 **특정 버킷 수준**에만 부여하여 과잉 권한 제거.
+- **Cloud Run 리소스 제한 추가:** `max-instances=3`, `min-instances=0`, `memory=512Mi`, `concurrency=10`, `timeout=30s` 설정으로 비용 및 성능 최적화.
+- **Artifact Registry 클린업 정책:** 빌드 이미지를 최신 5개만 유지하여 스토리지 비용 절감.
+
+### 아키텍처 (Architecture)
+- **이미지 GCS 저장 제거:** 생성된 이미지를 GCS에 저장하던 `imageStore.ts`를 삭제하고 base64 데이터 URL을 클라이언트에 직접 반환하도록 변경. GCS 사용량 및 복잡도 감소.
+- **전역 설정 60초 인메모리 캐시:** `quotaStore.ts`의 전역 설정(config) 조회에 60초 TTL 캐시 적용. GCS 읽기 횟수 감소 및 API 응답 속도 향상.
+- **useUser 커스텀 훅:** 중복된 사용자 인증 및 쿼터 폴링 로직을 `src/hooks/useUser.ts`로 통합. 폴링 주기는 `QUOTA_POLL_INTERVAL` 상수로 관리.
+- **관리자 페이지 컴포넌트 분리:** 단일 파일이던 관리자 페이지를 `AdminLogin`, `AdminSettings`, `AdminStudentTable` 세 컴포넌트로 분리.
+
 ### 보안 (Security)
 - **PIN bcrypt 해싱:** 학생 PIN 번호를 `bcryptjs`로 해싱 저장. 평문 PIN이 데이터에 남지 않으며, 기존 평문 PIN은 최초 로그인 시 자동 마이그레이션됩니다.
 - **GCS 조건부 쓰기 (낙관적 잠금):** Cloud Run 다중 인스턴스 환경에서 quota 데이터 충돌을 방지하는 Generation-number 기반 낙관적 잠금 적용. 충돌 시 최대 3회 자동 재시도합니다.
 - **관리자 인증 강화:** 환경 변수 누락 시 서버 시작 단계에서 즉시 에러 처리. 관리자 세션 검증 헬퍼(`adminAuth.ts`) 분리.
-
-### 아키텍처 (Architecture)
-- **useUser 커스텀 훅:** 중복된 사용자 인증 및 쿼터 폴링 로직을 `src/hooks/useUser.ts`로 통합. 폴링 주기는 `QUOTA_POLL_INTERVAL` 상수로 관리.
-- **관리자 페이지 컴포넌트 분리:** 단일 파일이던 관리자 페이지를 `AdminLogin`, `AdminSettings`, `AdminStudentTable` 세 컴포넌트로 분리.
-- **이미지 GCS 저장:** 생성된 이미지를 GCS에 자동 저장(`src/lib/imageStore.ts`). 추후 히스토리 기능 기반 마련.
 
 ### 품질 (Quality)
 - **Toast / ConfirmModal UI:** 브라우저 기본 `alert()` / `confirm()` 대화상자를 커스텀 Toast 알림과 ConfirmModal로 교체.
@@ -102,7 +146,6 @@ npm run dev
 
 ### 이전 개선 사항
 - **서버리스 데이터 영속성 (GCS 하이브리드):** Cloud Run과 같은 Stateless 환경에서도 학생 데이터 및 설정이 초기화되지 않도록 Local File + GCS 동기화 로직 추가.
-- **클라우드 런 배포 자동화:** 손쉬운 GCP 배포를 위한 `deploy.sh` 스크립트 제공.
 - **동시성 문제(Race Condition) 해결:** JSON 파일 쓰기 시 Node.js 메모리 뮤텍스를 적용하여 다수 사용자의 동시 호출 시 파일 덮어쓰기 문제 해결.
 - **SWR 라이브러리 도입:** `setInterval` 폴링 대신 SWR로 지능적인 실시간 할당량 UI 업데이트 구현.
 - **AI API 최적화 (DRY 원칙):** 서비스 레이어 분리 및 Exponential Backoff 재시도 로직 도입.
