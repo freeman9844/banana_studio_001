@@ -64,3 +64,41 @@ describe('quotaStore — GCS conditional writes', () => {
     expect(mockSave).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('quotaStore — config cache', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    process.env.GCS_BUCKET_NAME = 'test-bucket';
+    process.env.GOOGLE_CLOUD_PROJECT = 'test-project';
+  });
+
+  it('returns cached config on second call within TTL', async () => {
+    const configData = JSON.stringify({ maxQuota: 5, resolution: '512' });
+    mockReadFile.mockResolvedValue(configData);
+
+    const { getConfig } = await import('@/lib/quotaStore');
+    const result1 = await getConfig();
+    const result2 = await getConfig();
+
+    expect(result1).toEqual({ maxQuota: 5, resolution: '512' });
+    expect(result2).toEqual({ maxQuota: 5, resolution: '512' });
+    // 두 번 호출했지만 파일 읽기는 한 번만
+    expect(mockReadFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates cache after saveConfig', async () => {
+    const configData = JSON.stringify({ maxQuota: 5, resolution: '512' });
+    mockReadFile.mockResolvedValue(configData);
+    mockWriteFile.mockResolvedValue(undefined);
+    mockSave.mockResolvedValue(undefined);
+
+    const { getConfig, saveConfig } = await import('@/lib/quotaStore');
+    await getConfig(); // 캐시 채움
+    await saveConfig({ maxQuota: 10, resolution: '1024' }); // 캐시 무효화
+    await getConfig(); // 재조회
+
+    // saveConfig 후 getConfig가 파일을 다시 읽어야 함
+    expect(mockReadFile).toHaveBeenCalledTimes(2);
+  });
+});

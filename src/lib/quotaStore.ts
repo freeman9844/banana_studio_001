@@ -89,18 +89,28 @@ class Mutex {
   }
 }
 
+// Config in-memory cache (TTL: 60s)
+let configCache: { data: GlobalConfig; expiresAt: number } | null = null;
+const CONFIG_TTL_MS = 60_000;
+
 const fileMutex = new Mutex();
 
 export async function getConfig(): Promise<GlobalConfig> {
+  if (configCache && Date.now() < configCache.expiresAt) {
+    return configCache.data;
+  }
   const defaultFallback: GlobalConfig = { maxQuota: 20, resolution: '1024' };
   const parsed = await readFromFileOrGcs(configFilePath, 'config.json', defaultFallback);
-  return {
+  const data: GlobalConfig = {
     maxQuota: parsed.maxQuota || 20,
     resolution: parsed.resolution || '1024',
   };
+  configCache = { data, expiresAt: Date.now() + CONFIG_TTL_MS };
+  return data;
 }
 
 export async function saveConfig(config: GlobalConfig): Promise<void> {
+  configCache = null; // Invalidate cache immediately on admin change
   await writeToFileAndGcs(configFilePath, 'config.json', config);
 }
 
